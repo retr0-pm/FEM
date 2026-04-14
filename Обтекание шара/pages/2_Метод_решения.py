@@ -58,7 +58,7 @@ if menu == "Вариационная постановка":
     где $V_0$ - пространство тестовых функций, равных нулю на внешней границе.
     """)
 
-if menu == "Конечно-элементная аппроксимация":
+elif menu == "Конечно-элементная аппроксимация":
     st.markdown(r"""
     ##### Конечно-элементная аппроксимация
 
@@ -113,7 +113,7 @@ if menu == "Конечно-элементная аппроксимация":
     \end{aligned}$
     """)
 
-if menu == "Вычислительный алгоритм":
+elif menu == "Вычислительный алгоритм":
     st.markdown(r"""
     ##### Вычислительный алгоритм
 
@@ -123,12 +123,12 @@ if menu == "Вычислительный алгоритм":
 
     **2. Инициализация в FEniCS**
     - Загрузка сетки: `Mesh()` + `XDMFFile.read()`
-    - Создание маркеров границ: `MeshFunction`
+    - Создание маркеров границ: `create_boundary_markers(mesh, R)`
     - Определение пространства: `FunctionSpace(mesh, 'P', degree)`
 
     **3. Задание вариационной формы**
     - Определение пробной и тестовой функций
-    - Задание билинейной формы с весом $r$
+    - Задание билинейной формы: `a = (phi.dx(0)*v.dx(0) + phi.dx(1)*v.dx(1)) * r * dx`
     - Учет граничных условий Дирихле
 
     **4. Решение СЛАУ**
@@ -138,15 +138,15 @@ if menu == "Вычислительный алгоритм":
     **5. Постобработка**
     - Вычисление скорости: `project(grad(phi), W)`
     - Расчет касательной скорости на поверхности шара
-    - Визуализация результатов
+    - Визуализация результатов (потенциал, скорость, линии тока)
 
     **6. Верификация**
     - Сравнение с точным решением $u_\theta = 1.5 u_\infty \sin\theta$
-    - Вычисление L2-нормы ошибки
+    - Вычисление L2-нормы и максимальной ошибки
     - Анализ сходимости на последовательности сеток
     """)
 
-if menu == "Фрагменты кода":
+elif menu == "Фрагменты кода":
     st.markdown(r"""
     ##### Фрагменты кода (реализация в FEniCS)
 
@@ -158,7 +158,7 @@ from dolfin import *
 
 # Загрузка сетки
 mesh = Mesh()
-with XDMFFile("mesh_sphere_R5.0_level2.xdmf") as infile:
+with XDMFFile("meshes/mesh_a1.0_R5.0_level2.xdmf") as infile:
     infile.read(mesh)
 
 # Создание функционального пространства
@@ -168,28 +168,37 @@ V = FunctionSpace(mesh, 'P', degree)
     st.code(code, language="python")
 
     st.markdown(r"""
-    **Маркировка границ**
+    **Маркировка границ (с параметрическим радиусом R)**
     """)
 
     code = """
-# Создание маркеров границ
-boundaries = MeshFunction("size_t", mesh, mesh.topology().dim()-1)
-boundaries.set_all(0)
+def create_boundary_markers(mesh, R=5.0):
+    boundaries = MeshFunction("size_t", mesh, mesh.topology().dim() - 1)
+    boundaries.set_all(0)
 
-class SphereBoundary(SubDomain):
-    def inside(self, x, on_boundary):
-        r, z = x[1], x[0]
-        return on_boundary and near(r*r + z*z, 1.0, 1e-2) and r > 0
+    class SphereBoundary(SubDomain):
+        def inside(self, x, on_boundary):
+            r, z = x[1], x[0]
+            return on_boundary and near(r*r + z*z, 1.0, 1e-2) and r > 0
 
-class OuterBoundary(SubDomain):
-    def inside(self, x, on_boundary):
-        r, z = x[1], x[0]
-        return on_boundary and near(r*r + z*z, 25.0, 5e-1) and r > 0
+    class OuterBoundary(SubDomain):
+        def inside(self, x, on_boundary):
+            r, z = x[1], x[0]
+            return on_boundary and near(r*r + z*z, R*R, 5e-1) and r > 0
 
-sphere_bd = SphereBoundary()
-outer_bd = OuterBoundary()
-sphere_bd.mark(boundaries, 1)  # поверхность шара
-outer_bd.mark(boundaries, 2)   # внешняя граница
+    class SymmetryAxis(SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and near(x[1], 0.0, 1e-3)
+
+    sphere_bd = SphereBoundary()
+    outer_bd = OuterBoundary()
+    sym_bd = SymmetryAxis()
+
+    sphere_bd.mark(boundaries, 1)  # поверхность шара
+    outer_bd.mark(boundaries, 2)   # внешняя граница
+    sym_bd.mark(boundaries, 3)     # ось симметрии
+
+    return boundaries
     """
     st.code(code, language="python")
 
@@ -219,12 +228,14 @@ L = Constant(0.0) * v * dx
     code = """
 # Условие на внешней границе: φ = u_inf * z
 u_inf = 1.0
-bc_outer = DirichletBC(V, Expression('u_inf * x[0]', degree=degree, u_inf=u_inf), 
-                       boundaries, 2)
+boundaries = create_boundary_markers(mesh, R)
+outer_value = Expression('u_inf * x[0]', u_inf=u_inf, degree=degree)
+bc_outer = DirichletBC(V, outer_value, boundaries, 2)
+bcs = [bc_outer]
 
 # Решение
 phi = Function(V)
-solve(a == L, phi, bc_outer)
+solve(a == L, phi, bcs)
     """
     st.code(code, language="python")
 
@@ -233,11 +244,13 @@ solve(a == L, phi, bc_outer)
     """)
 
     code = """
-# Пространство для векторного поля
-W = VectorFunctionSpace(mesh, 'P', degree)
+def compute_velocity_field(phi, V):
+    degree = V.ufl_element().degree()
+    W = VectorFunctionSpace(V.mesh(), 'P', degree)
+    velocity = project(grad(phi), W)
+    return velocity
 
-# Скорость как градиент потенциала
-velocity = project(grad(phi), W)
+velocity = compute_velocity_field(phi, V)
     """
     st.code(code, language="python")
 
@@ -247,8 +260,7 @@ velocity = project(grad(phi), W)
 
     code = """
 def compute_surface_velocity(phi, V, a=1.0, u_inf=1.0):
-    velocity = project(grad(phi), VectorFunctionSpace(V.mesh(), 'P', V.ufl_element().degree()))
-
+    velocity = compute_velocity_field(phi, V)
     coords = V.mesh().coordinates()
     theta_vals, v_vals = [], []
 
@@ -256,16 +268,23 @@ def compute_surface_velocity(phi, V, a=1.0, u_inf=1.0):
         r, z = x[1], x[0]
         if near(r*r + z*z, a*a, 1e-2) and r > 0.05:
             vel = velocity(x)
+            v_z, v_r = vel[0], vel[1]
             # Касательный вектор: t = (r/a, -z/a)
-            v_t = vel[0] * (r/a) + vel[1] * (-z/a)
+            v_t = v_z * (r/a) + v_r * (-z/a)
 
             theta = np.arccos(np.clip(-z/a, -1.0, 1.0))
             theta_vals.append(theta)
             v_vals.append(v_t)
 
-    return np.array(theta_vals), np.array(v_vals)
+    theta = np.array(theta_vals)
+    v_num = np.array(v_vals)
+    v_exact = 1.5 * u_inf * np.sin(theta)
 
-theta, v_num = compute_surface_velocity(phi, V)
-v_exact = 1.5 * u_inf * np.sin(theta)
+    return theta, v_num, v_exact
+
+theta, v_num, v_exact = compute_surface_velocity(phi, V)
+error = np.abs(v_num - v_exact)
+l2_error = np.sqrt(np.mean(error**2))
+max_error = np.max(error)
     """
     st.code(code, language="python")
