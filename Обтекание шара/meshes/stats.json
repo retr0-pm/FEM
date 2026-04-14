@@ -1,0 +1,83 @@
+[
+  {
+    "R": 3.0,
+    "level": "level1",
+    "factor": 1.5,
+    "nodes": 62,
+    "elements": 127,
+    "xdmf": "meshes/mesh_a1.0_R3.0_level1.xdmf",
+    "png": "meshes/mesh_a1.0_R3.0_level1.png"
+  },
+  {
+    "R": 3.0,
+    "level": "level2",
+    "factor": 0.8,
+    "nodes": 526,
+    "elements": 1055,
+    "xdmf": "meshes/mesh_a1.0_R3.0_level2.xdmf",
+    "png": "meshes/mesh_a1.0_R3.0_level2.png"
+  },
+  {
+    "R": 3.0,
+    "level": "level3",
+    "factor": 0.4,
+    "nodes": 6895,
+    "elements": 13793,
+    "xdmf": "meshes/mesh_a1.0_R3.0_level3.xdmf",
+    "png": "meshes/mesh_a1.0_R3.0_level3.png"
+  },
+  {
+    "R": 5.0,
+    "level": "level1",
+    "factor": 1.5,
+    "nodes": 136,
+    "elements": 275,
+    "xdmf": "meshes/mesh_a1.0_R5.0_level1.xdmf",
+    "png": "meshes/mesh_a1.0_R5.0_level1.png"
+  },
+  {
+    "R": 5.0,
+    "level": "level2",
+    "factor": 0.8,
+    "nodes": 1298,
+    "elements": 2599,
+    "xdmf": "meshes/mesh_a1.0_R5.0_level2.xdmf",
+    "png": "meshes/mesh_a1.0_R5.0_level2.png"
+  },
+  {
+    "R": 5.0,
+    "level": "level3",
+    "factor": 0.4,
+    "nodes": 18494,
+    "elements": 36991,
+    "xdmf": "meshes/mesh_a1.0_R5.0_level3.xdmf",
+    "png": "meshes/mesh_a1.0_R5.0_level3.png"
+  },
+  {
+    "R": 7.0,
+    "level": "level1",
+    "factor": 1.5,
+    "nodes": 233,
+    "elements": 469,
+    "xdmf": "meshes/mesh_a1.0_R7.0_level1.xdmf",
+    "png": "meshes/mesh_a1.0_R7.0_level1.png"
+  },
+  {
+    "R": 7.0,
+    "level": "level2",
+    "factor": 0.8,
+    "nodes": 2386,
+    "elements": 4775,
+    "xdmf": "meshes/mesh_a1.0_R7.0_level2.xdmf",
+    "png": "meshes/mesh_a1.0_R7.0_level2.png"
+  },
+  {
+    "R": 7.0,
+    "level": "level3",
+    "factor": 0.4,
+    "nodes": 34447,
+    "elements": 68897,
+    "xdmf": "meshes/mesh_a1.0_R7.0_level3.xdmf",
+    "png": "meshes/mesh_a1.0_R7.0_level3.png"
+  }
+]
