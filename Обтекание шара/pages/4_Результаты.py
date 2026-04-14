@@ -13,7 +13,7 @@ menu = st.sidebar.radio('***',
                          "Сходимость по сетке",
                          "Сравнение уровней сетки",
                          "Сравнение степеней p",
-                         "Поля скорости",
+                         "Цветные графики полей",
                          "Выводы")
                         )
 
@@ -33,7 +33,6 @@ if menu == "Сводная таблица":
         pivot = df.pivot_table(values='max_error', index=['R', 'level'], columns='degree')
         pivot.columns = [f'p={int(col)}' for col in pivot.columns]
 
-        # Форматирование
         for col in pivot.columns:
             pivot[col] = pivot[col].apply(lambda x: f"{x:.2e}")
 
@@ -110,56 +109,117 @@ elif menu == "Сравнение степеней p":
     else:
         st.warning("График не найден.")
 
-elif menu == "Поля скорости":
-    st.markdown("##### Поля скорости (p=2, level2)")
+elif menu == "Цветные графики полей":
+    st.markdown("##### Цветные графики полей")
+    st.markdown("Выберите параметры для просмотра графиков потенциала, скорости и линий тока.")
 
-    tab1, tab2, tab3 = st.tabs(["R=3.0", "R=5.0", "R=7.0"])
+    if df is not None:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            R_select = st.selectbox("Радиус R", sorted(df['R'].unique()))
+        with col2:
+            level_select = st.selectbox("Уровень сетки", sorted(df['level'].unique()))
+        with col3:
+            p_select = st.selectbox("Степень p", sorted(df['degree'].unique()))
 
-    with tab1:
-        fig_file = f"{RESULTS_DIR}/velocity_R3.0_level2_p2.png"
-        if os.path.exists(fig_file):
-            st.image(fig_file)
-    with tab2:
-        fig_file = f"{RESULTS_DIR}/velocity_R5.0_level2_p2.png"
-        if os.path.exists(fig_file):
-            st.image(fig_file)
-    with tab3:
-        fig_file = f"{RESULTS_DIR}/velocity_R7.0_level2_p2.png"
-        if os.path.exists(fig_file):
-            st.image(fig_file)
+        st.markdown("---")
+
+        # Четыре типа графиков
+        graph_types = {
+            "potential": "Потенциал скорости φ",
+            "velocity_mag": "Модуль скорости |u|/u_∞",
+            "velocity_field": "Векторное поле скорости",
+            "streamlines": "Эквипотенциали / Линии тока"
+        }
+
+        cols = st.columns(2)
+        for i, (key, name) in enumerate(graph_types.items()):
+            with cols[i % 2]:
+                fig_file = f"{RESULTS_DIR}/{key}_R{R_select}_{level_select}_p{p_select}.png"
+                if os.path.exists(fig_file):
+                    st.image(fig_file, caption=f"{name} (R={R_select}, {level_select}, p={p_select})",
+                             use_container_width=True)
+                else:
+                    st.warning(f"График {name} не найден")
+
+        st.markdown("---")
+        st.markdown("**Статистика для выбранного случая:**")
+        selected_data = df[(df['R'] == R_select) & (df['level'] == level_select) & (df['degree'] == p_select)]
+        if len(selected_data) > 0:
+            row = selected_data.iloc[0]
+            cols = st.columns(4)
+            with cols[0]:
+                st.metric("Узлы", int(row['nodes']))
+            with cols[1]:
+                st.metric("Ячейки", int(row['cells']))
+            with cols[2]:
+                st.metric("Max ошибка", f"{row['max_error']:.2e}")
+            with cols[3]:
+                st.metric("L2 ошибка", f"{row['L2_error']:.2e}")
+    else:
+        st.warning("Результаты не найдены. Запустите `python run_calculations.py`")
 
 elif menu == "Выводы":
     st.markdown("""
     ##### Основные выводы
 
-    **1. Сходимость по сетке:**
-    - При измельчении сетки ошибка монотонно уменьшается
-    - p=2 показывает наилучшее соотношение точность/время
-    - p=3 на грубых сетках может давать большую ошибку из-за недостаточного разрешения
+    **1. Сходимость по сетке (R=5):**
 
-    **2. Влияние уровня сетки (R=5, p=2):**
-    - level1 (362 ячейки): max_error ≈ 2.1e-02
-    - level2 (3668 ячеек): max_error ≈ 5.6e-03
-    - level3 (55884 ячейки): max_error ≈ 4.4e-03
-    - Переход от level1 к level2 дает значительное улучшение, далее — замедление
+    | Уровень | p=1 | p=2 | p=3 |
+    |---------|-----|-----|-----|
+    | level1 | 5.56e-02 | 2.89e-02 | 1.07e-01 |
+    | level2 | 1.69e-02 | 7.71e-03 | 3.78e-02 |
+    | level3 | 1.02e-02 | 6.09e-03 | 6.91e-03 |
 
-    **3. Влияние степени полиномов (R=5, level2):**
-    - p=1: max_error ≈ 8.4e-03
-    - p=2: max_error ≈ 5.6e-03
-    - p=3: max_error ≈ 2.6e-02 (ухудшение на данной сетке!)
-    - p=2 оптимален для level2
+    - При измельчении сетки ошибка монотонно уменьшается для всех p
+    - **p=2 показывает наилучшие результаты** на всех уровнях
+    - p=3 на грубых сетках дает большую ошибку из-за осцилляций
 
-    **4. Влияние радиуса R (p=2, level2):**
-    - R=3: max_error ≈ 2.1e-02 (близость границы влияет)
-    - R=5: max_error ≈ 5.6e-03 (достаточно для точности)
-    - R=7: max_error ≈ 3.0e-03 (небольшое улучшение)
+    **2. Влияние радиуса R (p=2, level2):**
 
-    **5. Лучший результат:**
-    - R=7.0, level3, p=2: max_error = 1.66e-03
-    - R=5.0, level3, p=2: max_error = 4.38e-03 (почти так же хорошо)
+    | R | max_error |
+    |----|-----------|
+    | 3.0 | 2.97e-02 |
+    | 5.0 | 7.71e-03 |
+    | 7.0 | 4.38e-03 |
 
-    **6. Рекомендации:**
-    - Оптимальный выбор: **R=5.0, level2, p=2**
-    - Для высокой точности: **R=5.0, level3, p=2**
-    - p=3 не рекомендуется для использованных сеток
+    - R=3: заметное влияние близкой границы (ошибка ~3%)
+    - R=5: достаточно для практических расчетов (ошибка < 1%)
+    - R=7: дальнейшее улучшение в ~1.8 раза
+
+    **3. Сравнение уровней сетки (R=5, p=2):**
+
+    | Уровень | Ячейки | max_error | Улучшение |
+    |---------|--------|-----------|-----------|
+    | level1 | 362 | 2.89e-02 | — |
+    | level2 | 3,668 | 7.71e-03 | в 3.7 раза |
+    | level3 | 55,884 | 6.09e-03 | в 1.3 раза |
+
+    - Переход level1 → level2 дает значительное улучшение
+    - Переход level2 → level3 дает небольшое улучшение при большом росте вычислений
+
+    **4. Лучшие результаты:**
+
+    | R | Уровень | p | max_error |
+    |----|---------|---|-----------|
+    | 7.0 | level3 | 2 | **2.37e-03** |
+    | 7.0 | level2 | 2 | 4.38e-03 |
+    | 5.0 | level3 | 2 | 6.09e-03 |
+
+    **5. Анализ цветных графиков полей:**
+
+    - **Потенциал φ**: плавное изменение от -R до +R, эквипотенциали сгущаются у шара
+    - **Модуль скорости**: максимум (1.5 u_∞) достигается на экваторе шара (θ = 90°)
+    - **Векторное поле**: поток плавно огибает шар, ускоряясь вблизи поверхности
+    - **Линии тока**: симметричны относительно оси z, повторяют форму шара
+
+    **6. Практические рекомендации:**
+
+    | Сценарий | R | Уровень | p | max_error |
+    |----------|---|---------|---|-----------|
+    | Быстрая оценка | 5.0 | level1 | 2 | 2.89e-02 (3%) |
+    | **Оптимальный** | **5.0** | **level2** | **2** | **7.71e-03 (<1%)** |
+    | Высокая точность | 5.0 | level3 | 2 | 6.09e-03 |
+    | Макс. точность | 7.0 | level3 | 2 | 2.37e-03 |
+
     """)

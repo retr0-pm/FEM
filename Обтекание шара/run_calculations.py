@@ -114,8 +114,107 @@ def compute_surface_velocity(phi, V, a=1.0, u_inf=1.0):
 
     return theta, v_num, v_exact
 
+def plot_potential_field(phi, mesh, R, degree, filename):
+    """Создание цветного графика потенциала скорости (только вне шара)"""
+    fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+
+    coords = mesh.coordinates()
+    z = coords[:, 0]
+    r = coords[:, 1]
+
+    # Маскируем точки внутри шара
+    mask = (z**2 + r**2) >= 1.0
+
+    z_plot = z[mask]
+    r_plot = r[mask]
+
+    # Значения потенциала только для точек вне шара
+    phi_vals_all = phi.compute_vertex_values(mesh)
+    phi_vals = phi_vals_all[mask]
+
+    import matplotlib.tri as tri
+    triang = tri.Triangulation(z_plot, r_plot)
+
+    levels = 50
+    contour = ax.tricontourf(triang, phi_vals, levels=levels, cmap='RdYlBu_r', extend='both')
+    plt.colorbar(contour, ax=ax, label='Потенциал φ', shrink=0.8)
+
+    # Контур шара (закрашенный)
+    theta = np.linspace(0, np.pi, 50)
+    z_sphere = np.cos(theta)
+    r_sphere = np.sin(theta)
+    ax.fill(z_sphere, r_sphere, 'white', edgecolor='black', linewidth=2, label='Шар (a=1)')
+
+    # Внешняя граница
+    z_outer = R * np.cos(theta)
+    r_outer = R * np.sin(theta)
+    ax.plot(z_outer, r_outer, 'k--', linewidth=1, alpha=0.5, label=f'Граница (R={R})')
+
+    ax.set_xlabel('z', fontsize=12)
+    ax.set_ylabel('r', fontsize=12)
+    ax.set_title(f'Потенциал скорости φ (R={R}, p={degree})', fontsize=14)
+    ax.set_aspect('equal')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
+    plt.close()
+
+def plot_velocity_magnitude(velocity, mesh, R, degree, u_inf=1.0, filename="velocity_mag.png"):
+    """Создание цветного графика модуля скорости (только вне шара)"""
+    fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+
+    coords = mesh.coordinates()
+    z = coords[:, 0]
+    r = coords[:, 1]
+
+    # Маскируем точки внутри шара
+    mask = (z**2 + r**2) >= 1.0
+
+    z_plot = z[mask]
+    r_plot = r[mask]
+
+    # Вычисление модуля скорости только вне шара
+    V_mag = np.zeros(len(z_plot))
+    for i, (zi, ri) in enumerate(zip(z_plot, r_plot)):
+        try:
+            vel = velocity(Point(zi, ri))
+            V_mag[i] = np.sqrt(vel[0]**2 + vel[1]**2) / u_inf
+        except:
+            V_mag[i] = 0
+
+    import matplotlib.tri as tri
+    triang = tri.Triangulation(z_plot, r_plot)
+
+    levels = 50
+    contour = ax.tricontourf(triang, V_mag, levels=levels, cmap='viridis', vmin=0, vmax=1.8, extend='both')
+    plt.colorbar(contour, ax=ax, label='|u| / u_∞', shrink=0.8)
+
+    # Контур шара (закрашенный)
+    theta = np.linspace(0, np.pi, 50)
+    z_sphere = np.cos(theta)
+    r_sphere = np.sin(theta)
+    ax.fill(z_sphere, r_sphere, 'white', edgecolor='red', linewidth=2, label='Шар (a=1)')
+
+    # Внешняя граница
+    z_outer = R * np.cos(theta)
+    r_outer = R * np.sin(theta)
+    ax.plot(z_outer, r_outer, 'k--', linewidth=1, alpha=0.5, label=f'Граница (R={R})')
+
+    ax.set_xlabel('z', fontsize=12)
+    ax.set_ylabel('r', fontsize=12)
+    ax.set_title(f'Модуль скорости |u|/u_∞ (R={R}, p={degree})', fontsize=14)
+    ax.set_aspect('equal')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
+    plt.close()
+
 def plot_velocity_field(velocity, mesh, R, degree, filename):
-    """Создание графика поля скорости"""
+    """Создание графика векторного поля скорости"""
     coords = mesh.coordinates()
 
     # Сетка для векторов
@@ -154,12 +253,14 @@ def plot_velocity_field(velocity, mesh, R, degree, filename):
     r_outer = R * np.sin(theta)
 
     ax.quiver(Z_plot, R_plot, U_z, U_r, angles='xy', scale_units='xy', scale=1, alpha=0.6, width=0.002)
-    ax.plot(z_sphere, r_sphere, 'r-', linewidth=2, label='Шар (a=1)')
-    ax.plot(z_outer, r_outer, 'k--', linewidth=1, alpha=0.5, label=f'Внешняя граница (R={R})')
 
-    ax.set_xlabel('z')
-    ax.set_ylabel('r')
-    ax.set_title(f'Поле скорости (R={R}, p={degree})')
+    # Закрашенный шар
+    ax.fill(z_sphere, r_sphere, 'white', edgecolor='red', linewidth=2, label='Шар (a=1)')
+    ax.plot(z_outer, r_outer, 'k--', linewidth=1, alpha=0.5, label=f'Граница (R={R})')
+
+    ax.set_xlabel('z', fontsize=12)
+    ax.set_ylabel('r', fontsize=12)
+    ax.set_title(f'Поле скорости (R={R}, p={degree})', fontsize=14)
     ax.set_aspect('equal')
     ax.grid(True, alpha=0.3)
     ax.legend()
@@ -167,6 +268,74 @@ def plot_velocity_field(velocity, mesh, R, degree, filename):
     plt.tight_layout()
     plt.savefig(filename, dpi=150, bbox_inches='tight')
     plt.close()
+
+def plot_streamlines(phi, mesh, R, degree, filename):
+    """Создание графика линий тока (только вне шара)"""
+    fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+
+    # Сетка для линий тока
+    z_vals = np.linspace(-R, R, 100)
+    r_vals = np.linspace(0, R, 50)
+    Z, R_mesh = np.meshgrid(z_vals, r_vals)
+
+    # Маскируем область внутри шара
+    mask = (Z**2 + R_mesh**2) >= 1.0
+
+    # Значения потенциала на сетке
+    PHI = np.full_like(Z, np.nan)
+    for i in range(Z.shape[0]):
+        for j in range(Z.shape[1]):
+            if mask[i, j]:
+                try:
+                    PHI[i, j] = phi(Point(Z[i, j], R_mesh[i, j]))
+                except:
+                    pass
+
+    # Эквипотенциали
+    levels = 20
+    contour = ax.contour(Z, R_mesh, PHI, levels=levels, colors='blue', alpha=0.6, linewidths=1)
+    ax.clabel(contour, inline=True, fontsize=8, fmt='%.2f')
+
+    # Контур шара (закрашенный)
+    theta = np.linspace(0, np.pi, 50)
+    z_sphere = np.cos(theta)
+    r_sphere = np.sin(theta)
+    ax.fill(z_sphere, r_sphere, 'lightgray', edgecolor='black', linewidth=2, label='Шар (a=1)')
+
+    # Внешняя граница
+    z_outer = R * np.cos(theta)
+    r_outer = R * np.sin(theta)
+    ax.plot(z_outer, r_outer, 'k--', linewidth=1, alpha=0.5, label=f'Граница (R={R})')
+
+    ax.set_xlabel('z', fontsize=12)
+    ax.set_ylabel('r', fontsize=12)
+    ax.set_title(f'Эквипотенциали / Линии тока (R={R}, p={degree})', fontsize=14)
+    ax.set_aspect('equal')
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
+    plt.close()
+
+def check_potential_properties(phi, mesh, R=5.0):
+    """Проверка свойств потенциала (для отладки)"""
+    print("\n=== Проверка потенциала ===")
+
+    phi_min = phi.vector().min()
+    phi_max = phi.vector().max()
+    print(f"φ ∈ [{phi_min:.3f}, {phi_max:.3f}]")
+    print(f"Ожидаемый диапазон: [{-R:.3f}, {R:.3f}]")
+
+    test_points = [(2.0, 1.0), (3.0, 2.0), (1.5, 1.5)]
+    print("\nПроверка антисимметрии φ(-z, r) = -φ(z, r):")
+    for z, r in test_points:
+        try:
+            val_plus = phi(Point(z, r))
+            val_minus = phi(Point(-z, r))
+            print(f"  z={z:.1f}, r={r:.1f}: φ={val_plus:.3f}, φ(-z)={val_minus:.3f}, сумма={val_plus+val_minus:.2e}")
+        except:
+            pass
 
 def run_all_calculations():
     """Запуск всех расчетов"""
@@ -200,6 +369,11 @@ def run_all_calculations():
 
                 try:
                     phi, V, mesh = solve_potential_flow(mesh_file, degree=degree, R=R)
+
+                    # Проверка потенциала для одного случая
+                    if R == 5.0 and level == "level2" and degree == 2:
+                        check_potential_properties(phi, mesh, R)
+
                     theta, v_num, v_exact = compute_surface_velocity(phi, V)
 
                     if len(v_num) > 0:
@@ -211,11 +385,20 @@ def run_all_calculations():
                         result_file = f"{RESULTS_DIR}/data_R{R}_{level}_p{degree}.npz"
                         np.savez(result_file, theta=theta, v_num=v_num, v_exact=v_exact)
 
-                        # Создаем поле скорости для лучших случаев
-                        if level == "level2" and degree == 2:
-                            velocity = compute_velocity_field(phi, V)
-                            vel_file = f"{RESULTS_DIR}/velocity_R{R}_{level}_p{degree}.png"
-                            plot_velocity_field(velocity, mesh, R, degree, vel_file)
+                        # Создаем графики
+                        velocity = compute_velocity_field(phi, V)
+
+                        pot_file = f"{RESULTS_DIR}/potential_R{R}_{level}_p{degree}.png"
+                        plot_potential_field(phi, mesh, R, degree, pot_file)
+
+                        mag_file = f"{RESULTS_DIR}/velocity_mag_R{R}_{level}_p{degree}.png"
+                        plot_velocity_magnitude(velocity, mesh, R, degree, filename=mag_file)
+
+                        vel_file = f"{RESULTS_DIR}/velocity_field_R{R}_{level}_p{degree}.png"
+                        plot_velocity_field(velocity, mesh, R, degree, vel_file)
+
+                        str_file = f"{RESULTS_DIR}/streamlines_R{R}_{level}_p{degree}.png"
+                        plot_streamlines(phi, mesh, R, degree, str_file)
 
                         all_results.append({
                             'R': R,
@@ -249,7 +432,7 @@ def create_summary_plots():
     """Создание сводных графиков"""
     df = pd.read_csv(f"{RESULTS_DIR}/all_results.csv")
 
-    # 1. Сходимость по сетке для R=5 (все p)
+    # 1. Сходимость по сетке для R=5
     plt.figure(figsize=(10, 6))
     df_R5 = df[df['R'] == 5.0]
 
@@ -322,11 +505,6 @@ def create_summary_plots():
     plt.legend()
     plt.savefig(f"{RESULTS_DIR}/degree_comparison.png", dpi=150, bbox_inches='tight')
     plt.close()
-
-    # 4. Таблица ошибок по максимальному отклонению
-    pivot_table = df.pivot_table(values='max_error', index=['R', 'level'], columns='degree')
-    print("\nТаблица максимальных ошибок (max_error):")
-    print(pivot_table)
 
     print(f"\nГрафики сохранены в {RESULTS_DIR}/")
 
