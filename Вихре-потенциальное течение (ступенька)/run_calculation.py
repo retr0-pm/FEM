@@ -1,7 +1,7 @@
 """
 Запуск всех расчётов для задачи вихре-потенциального течения в канале с уступом.
 - Конвертация .msh в .xdmf
-- Расчёты для разных сеток, степеней p, циркуляций
+- Расчёты для разных сеток, степеней p, циркуляций, высот уступа
 - Сохранение результатов
 """
 import os
@@ -26,6 +26,7 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 # Параметры геометрии
 L = 4.0
 H = 1.0
+l = 1.0
 
 
 def convert_msh_to_xdmf(msh_path, xdmf_path):
@@ -121,15 +122,13 @@ def save_results_json(all_results):
     print(f"\nСводная таблица сохранена: {csv_path}")
 
 
-def plot_and_save(psi, mesh, file_prefix, title=""):
+def plot_and_save(psi, mesh, file_prefix, h_val, title=""):
     """
     Рисует и сохраняет графики: цветовую карту psi и изолинии с границами области.
     """
     V = psi.function_space()
-    psi_vals_all = psi.vector().get_local()
 
     mesh_coords = mesh.coordinates()
-
     tri = np.zeros((mesh.num_cells(), 3), dtype=int)
     for i, cell in enumerate(cells(mesh)):
         tri[i] = cell.entities(0)
@@ -142,18 +141,13 @@ def plot_and_save(psi, mesh, file_prefix, title=""):
                        shading='gouraud', cmap='RdBu_r')
     fig.colorbar(tcf, ax=ax, label=r'$\psi$')
 
-    # Рисуем контур области (границы канала и уступа)
-    # Канал: x1 от 0 до 4, x2 от -1 до 1 (с учётом уступа)
-    L, H = 4.0, 1.0
-    l, h = 1.0, 1.0
-
-    # Внешний контур области
+    # Контур области
     outline_x = [0, l, l, L, L, 0, 0]
-    outline_y = [0, 0, -h, -h, H, H, 0]
+    outline_y = [0, 0, -h_val, -h_val, H, H, 0]
     ax.plot(outline_x, outline_y, 'k-', linewidth=2.0, label='Граница области')
 
     # Уступ (жирная линия)
-    ax.plot([l, l], [0, -h], 'k-', linewidth=3.0)
+    ax.plot([l, l], [0, -h_val], 'k-', linewidth=3.0)
     ax.plot([0, l], [0, 0], 'k-', linewidth=3.0)
 
     ax.set_xlabel(r'$x_1$')
@@ -191,7 +185,7 @@ def plot_and_save(psi, mesh, file_prefix, title=""):
 
     # Контур области
     ax.plot(outline_x, outline_y, 'k-', linewidth=2.0)
-    ax.plot([l, l], [0, -h], 'k-', linewidth=3.0)
+    ax.plot([l, l], [0, -h_val], 'k-', linewidth=3.0)
     ax.plot([0, l], [0, 0], 'k-', linewidth=3.0)
 
     ax.set_xlabel(r'$x_1$')
@@ -207,170 +201,121 @@ def plot_and_save(psi, mesh, file_prefix, title=""):
     return psi_path, stream_path
 
 
+def run_single_calculation(mesh, boundaries, level, p, Gamma_val, h_val, variant_label):
+    """Выполняет один расчёт и сохраняет результаты."""
+    print(f"\n--- Расчёт: h={h_val}, {level}, p={p}, Gamma={Gamma_val} ---")
+
+    results = solve_vortex_channel(
+        mesh, boundaries, degree=p,
+        Gamma=Gamma_val, H=H, h=h_val,
+        max_iter=100, tol=1e-6
+    )
+
+    file_prefix = f"{variant_label}_h{h_val}_{level}_p{p}"
+    psi_path, stream_path = plot_and_save(
+        results["psi"], mesh, file_prefix, h_val,
+        title=f"$h={h_val}$, $\\Gamma={Gamma_val}$, {level}, $p={p}$"
+    )
+
+    if len(results["error_history"]) > 0:
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.semilogy(range(1, len(results["error_history"]) + 1),
+                    results["error_history"], 'o-', markersize=4)
+        ax.set_xlabel('Итерация')
+        ax.set_ylabel('Относительная ошибка')
+        ax.set_title(f'Сходимость: $h={h_val}$, $\\Gamma={Gamma_val}$, {level}, $p={p}$')
+        ax.grid(True)
+        fig.tight_layout()
+        conv_path = os.path.join(RESULTS_DIR, f"{file_prefix}_convergence.png")
+        fig.savefig(conv_path, dpi=150)
+        plt.close(fig)
+    else:
+        conv_path = ""
+
+    return {
+        "variant": variant_label,
+        "Gamma": Gamma_val,
+        "h": h_val,
+        "level": level,
+        "degree": p,
+        "nodes": mesh.num_vertices(),
+        "cells": mesh.num_cells(),
+        "omega": results["omega"],
+        "S": results["S"],
+        "n_iterations": results["n_iterations"],
+        "converged": results["converged"],
+        "psi_path": psi_path,
+        "stream_path": stream_path,
+        "conv_path": conv_path
+    }
+
+
+def load_or_convert_mesh(h_val, level):
+    """Загружает или конвертирует сетку для заданных h и уровня."""
+    msh_name = f"channel_step_mesh_h{h_val}_{level}.msh"
+    msh_path = os.path.join(MESH_DIR, msh_name)
+    xdmf_path = msh_path.replace(".msh", ".xdmf")
+
+    if not os.path.exists(msh_path):
+        print(f"Файл не найден: {msh_path}, пропускаем.")
+        return None, None, None
+
+    if not os.path.exists(xdmf_path):
+        convert_msh_to_xdmf(msh_path, xdmf_path)
+
+    mesh = Mesh()
+    with XDMFFile(xdmf_path) as infile:
+        infile.read(mesh)
+
+    boundaries = create_boundary_markers(mesh, msh_path)
+    return mesh, boundaries, msh_name
+
+
 # ============================================================
 # ОСНОВНОЙ ЦИКЛ РАСЧЁТОВ
 # ============================================================
 
 if __name__ == "__main__":
-    levels = ["level2", "level1"]  # level3 слишком медленный, пока пропускаем
-    degrees = [1, 2, 3]
-
     all_results = []
 
-    # --- Базовый вариант: Gamma = -2, h = 1.0 ---
-    Gamma_base = -2.0
+    # Все параметры
+    h_values = [0.5, 1.0, 1.5]
+    levels = ["level1", "level2", "level3"]
+    degrees = [1, 2, 3]
+    gamma_values = [-1.0, -2.0, -4.0]
+
+    total = len(h_values) * len(levels) * len(degrees) * len(gamma_values)
+    count = 0
 
     print("=" * 60)
-    print("БАЗОВЫЙ ВАРИАНТ: Gamma = -2, h = 1.0")
+    print(f"ПОЛНЫЙ ПЕРЕБОР: {total} вариантов")
     print("=" * 60)
 
-    for level in levels:
-        msh_path = os.path.join(MESH_DIR, f"channel_step_mesh_{level}.msh")
-        xdmf_path = os.path.join(MESH_DIR, f"channel_step_mesh_{level}.xdmf")
+    for h_val in h_values:
+        for level in levels:
+            mesh, boundaries, msh_name = load_or_convert_mesh(h_val, level)
+            if mesh is None:
+                continue
 
-        if not os.path.exists(msh_path):
-            print(f"Файл не найден: {msh_path}, пропускаем.")
-            continue
+            for p in degrees:
+                for Gamma_val in gamma_values:
+                    count += 1
+                    variant_label = f"h{h_val}_G{Gamma_val}"
+                    print(f"\n{'='*60}")
+                    print(f"[{count}/{total}] h={h_val}, {level}, p={p}, Gamma={Gamma_val}")
+                    print(f"{'='*60}")
 
-        if not os.path.exists(xdmf_path):
-            convert_msh_to_xdmf(msh_path, xdmf_path)
-
-        mesh = Mesh()
-        with XDMFFile(xdmf_path) as infile:
-            infile.read(mesh)
-
-        boundaries = create_boundary_markers(mesh, msh_path)
-
-        # Отладка: считаем грани
-        from collections import Counter
-        tag_counts = Counter()
-        for f in facets(mesh):
-            tag_counts[boundaries.array()[f.index()]] += 1
-        print(f"  Грани: {dict(tag_counts)}")
-
-        for p in degrees:
-            print(f"\n--- Расчёт: {level}, p={p} ---")
-
-            results = solve_vortex_channel(
-                mesh, boundaries, degree=p,
-                Gamma=Gamma_base, H=H,
-                max_iter=100, tol=1e-6
-            )
-
-            file_prefix = f"base_{level}_p{p}"
-            psi_path, stream_path = plot_and_save(
-                results["psi"], mesh, file_prefix,
-                title=f"$\\Gamma={Gamma_base}$, {level}, $p={p}$"
-            )
-
-            if len(results["error_history"]) > 0:
-                fig, ax = plt.subplots(figsize=(8, 4))
-                ax.semilogy(range(1, len(results["error_history"]) + 1),
-                            results["error_history"], 'o-', markersize=4)
-                ax.set_xlabel('Итерация')
-                ax.set_ylabel('Относительная ошибка')
-                ax.set_title(f'Сходимость: $\\Gamma={Gamma_base}$, {level}, $p={p}$')
-                ax.grid(True)
-                fig.tight_layout()
-                conv_path = os.path.join(RESULTS_DIR, f"{file_prefix}_convergence.png")
-                fig.savefig(conv_path, dpi=150)
-                plt.close(fig)
-            else:
-                conv_path = ""
-
-            all_results.append({
-                "variant": "base",
-                "Gamma": Gamma_base,
-                "h": 1.0,
-                "level": level,
-                "degree": p,
-                "nodes": mesh.num_vertices(),
-                "cells": mesh.num_cells(),
-                "omega": results["omega"],
-                "S": results["S"],
-                "n_iterations": results["n_iterations"],
-                "converged": results["converged"],
-                "psi_path": psi_path,
-                "stream_path": stream_path,
-                "conv_path": conv_path
-            })
-
-            print(f"  omega = {results['omega']:.6f}, S = {results['S']:.6f}, "
-                  f"итераций = {results['n_iterations']}")
-
-    # --- Дополнительные варианты циркуляции ---
-    gamma_values = [-1.0, -4.0]
-    level_mid = "level2"
-    p_mid = 2
-
-    for Gamma_var in gamma_values:
-        print(f"\n{'=' * 60}")
-        print(f"ВАРИАНТ: Gamma = {Gamma_var}, h = 1.0")
-        print("=" * 60)
-
-        msh_path = os.path.join(MESH_DIR, f"channel_step_mesh_{level_mid}.msh")
-        xdmf_path = os.path.join(MESH_DIR, f"channel_step_mesh_{level_mid}.xdmf")
-
-        if not os.path.exists(xdmf_path):
-            convert_msh_to_xdmf(msh_path, xdmf_path)
-
-        mesh = Mesh()
-        with XDMFFile(xdmf_path) as infile:
-            infile.read(mesh)
-
-        boundaries = create_boundary_markers(mesh, msh_path)
-
-        print(f"\n--- Расчёт: {level_mid}, p={p_mid} ---")
-
-        results = solve_vortex_channel(
-            mesh, boundaries, degree=p_mid,
-            Gamma=Gamma_var, H=H,
-            max_iter=100, tol=1e-6
-        )
-
-        file_prefix = f"Gamma_{Gamma_var}_{level_mid}_p{p_mid}"
-        psi_path, stream_path = plot_and_save(
-            results["psi"], mesh, file_prefix,
-            title=f"$\\Gamma={Gamma_var}$, {level_mid}, $p={p_mid}$"
-        )
-
-        if len(results["error_history"]) > 0:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.semilogy(range(1, len(results["error_history"]) + 1),
-                        results["error_history"], 'o-', markersize=4)
-            ax.set_xlabel('Итерация')
-            ax.set_ylabel('Относительная ошибка')
-            ax.set_title(f'Сходимость: $\\Gamma={Gamma_var}$, {level_mid}, $p={p_mid}$')
-            ax.grid(True)
-            fig.tight_layout()
-            conv_path = os.path.join(RESULTS_DIR, f"{file_prefix}_convergence.png")
-            fig.savefig(conv_path, dpi=150)
-            plt.close(fig)
-        else:
-            conv_path = ""
-
-        all_results.append({
-            "variant": f"Gamma_{Gamma_var}",
-            "Gamma": Gamma_var,
-            "h": 1.0,
-            "level": level_mid,
-            "degree": p_mid,
-            "nodes": mesh.num_vertices(),
-            "cells": mesh.num_cells(),
-            "omega": results["omega"],
-            "S": results["S"],
-            "n_iterations": results["n_iterations"],
-            "converged": results["converged"],
-            "psi_path": psi_path,
-            "stream_path": stream_path,
-            "conv_path": conv_path
-        })
-
-        print(f"  omega = {results['omega']:.6f}, S = {results['S']:.6f}, "
-              f"итераций = {results['n_iterations']}")
+                    result = run_single_calculation(
+                        mesh, boundaries, level, p,
+                        Gamma_val, h_val, variant_label
+                    )
+                    all_results.append(result)
+                    print(f"  omega = {result['omega']:.6f}, S = {result['S']:.6f}, "
+                          f"итераций = {result['n_iterations']}")
 
     save_results_json(all_results)
 
     print("\n" + "=" * 60)
     print("ВСЕ РАСЧЁТЫ ЗАВЕРШЕНЫ")
+    print(f"Всего вариантов: {len(all_results)}")
     print("=" * 60)

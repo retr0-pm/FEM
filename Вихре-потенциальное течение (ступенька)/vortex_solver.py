@@ -6,7 +6,7 @@ import numpy as np
 from dolfin import *
 
 
-def solve_vortex_channel(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0,
+def solve_vortex_channel(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=1.0,
                          max_iter=100, tol=1e-6):
     """
     Итерационное решение задачи вихре-потенциального течения.
@@ -17,6 +17,7 @@ def solve_vortex_channel(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0,
         degree: степень полиномов (1, 2, 3)
         Gamma: циркуляция (по умолчанию -2)
         H: высота канала (по умолчанию 1.0)
+        h: высота уступа (по умолчанию 1.0)
         max_iter: максимальное число итераций
         tol: допуск сходимости
 
@@ -60,16 +61,17 @@ def solve_vortex_channel(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0,
 
     if not has_vortex:
         print("  В начальном приближении вихря нет — задаём принудительную вихревую зону за уступом.")
-        # Принудительная вихревая зона: прямоугольник x1 in [1.0, 2.0], x2 in [-1.0, 0.0]
+        # Принудительная вихревая зона: прямоугольник x1 in [l, l+1.0], x2 in [-h, 0.0]
+        l = 1.0  # длина уступа
         marker_vals = np.zeros(DG0.dim())
         coords_DG = DG0.tabulate_dof_coordinates()
         for i, coord in enumerate(coords_DG):
-            if 1.0 <= coord[0] <= 2.0 and -1.0 <= coord[1] <= 0.0:
+            if l <= coord[0] <= l + 1.0 and -h <= coord[1] <= 0.0:
                 marker_vals[i] = 1.0
 
-        S_init = np.sum(marker_vals) * (2.0 * 1.0 / DG0.dim())  # грубая оценка площади
+        S_init = np.sum(marker_vals) * (1.0 * h / DG0.dim())  # грубая оценка площади
         if S_init < 1e-14:
-            S_init = 0.3  # запасной вариант
+            S_init = 0.3 * h  # запасной вариант
 
         omega_init = Gamma / S_init
         print(f"  Начальная площадь вихря (оценка): {S_init:.6f}, omega = {omega_init:.6f}")
