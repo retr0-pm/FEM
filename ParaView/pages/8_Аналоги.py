@@ -1,11 +1,11 @@
 import streamlit as st
 
 st.set_page_config(
-    page_title="ParaView: Аналоги и конкуренты",
+    page_title="ParaView: Аналоги",
     layout="wide"
 )
 
-st.title("ParaView: Аналоги и конкуренты")
+st.title("ParaView: Аналоги")
 
 menu = st.sidebar.radio(
     "Выберите раздел:",

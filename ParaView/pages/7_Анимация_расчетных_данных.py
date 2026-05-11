@@ -1,13 +1,15 @@
 import streamlit as st
 import os
 
+# Настройка страницы
 st.set_page_config(
-    page_title="ParaView: Анимация расчетных данных",
+    page_title="Анимация расчетных данных в ParaView",
     layout="wide"
 )
 
 st.title("ParaView: Анимация расчетных данных")
 
+# --- Боковая панель ---
 menu = st.sidebar.radio(
     "Выберите раздел:",
     ["Работа с временными рядами",
@@ -15,27 +17,57 @@ menu = st.sidebar.radio(
      "Экспорт анимации и примеры"]
 )
 
+# --- Раздел 1: Работа с временными рядами ---
 if menu == "Работа с временными рядами":
 
     st.markdown("### Загрузка данных с временными шагами")
-
     st.markdown("""
     ParaView поддерживает форматы, содержащие временные ряды:
-    - Серии файлов (`solution_0000.vtk`, `solution_0001.vtk`, ...)
+    - Серии файлов (например, `solution_0000.vtk`, `solution_0001.vtk`, ...)
     - Файлы с временными метками (`.pvd`, `.vtm`, `.xdmf`)
 
-    При загрузке ParaView автоматически определяет доступные временные шаги. На панели инструментов появляется ползунок времени (VCR-панель) для перемещения по кадрам.
+    При загрузке такой информации ParaView автоматически определяет доступные временные шаги и позволяет перемещаться по ним с помощью ползунка времени.
     """)
 
-    st.markdown("### Генерация данных в формате .vts")
+    # Генерация данных в формате .vts
+    st.markdown("---")
+    st.markdown("### Генерация собственных данных в формате .vts")
+    st.markdown("""
+    Формат **.vts (StructuredGrid)** используется для хранения структурированных (регулярных) сеток в ParaView.  
+    В сочетании с файлом коллекции **.pvd** можно создать временной ряд из нескольких .vts файлов.
+
+    Рассмотрим пример генерации волн. Данные сохраняются как набор `.vts` файлов и один `.pvd`, который ссылается на них с указанием временных меток.
+
+    #### Пример содержимого .vts файла
+    """)
+
+    st.code('''<?xml version="1.0"?>
+<VTKFile type="StructuredGrid" version="1.0" byte_order="LittleEndian">
+  <StructuredGrid WholeExtent="0 49 0 49 0 0">
+    <Piece Extent="0 49 0 49 0 0">
+      <Points>
+        <DataArray NumberOfComponents="3" type="Float32" format="ascii">
+          0.00000 0.00000 0.93515
+          0.15000 0.00000 0.95131
+          0.30000 0.00000 0.97469
+          0.45000 0.00000 1.00180
+          ...
+        </DataArray>
+      </Points>
+    </Piece>
+  </StructuredGrid>
+</VTKFile>''', language='xml')
 
     st.markdown("""
-    Формат **.vts (StructuredGrid)** используется для структурированных сеток. В сочетании с файлом коллекции **.pvd** создается временной ряд из нескольких .vts файлов.
-
-    Пример скрипта генерации волн:
+    **Пояснения:**
+    - `WholeExtent` и `Extent` задают размер сетки: `0 49 0 49 0 0` означает сетку 50×50×1 (2D поверхность в 3D).
+    - Внутри `<Points>` перечислены координаты всех точек (x, y, z). В данном случае z — высота волны.
     """)
 
-    code_generate = '''import numpy as np
+    st.markdown("#### Скрипт генерации (generate_wave3d.py)")
+
+    code_generate = '''# generate_wave3d.py
+import numpy as np
 import os
 
 OUTPUT_DIR = "paraview_wave3d"
@@ -54,23 +86,21 @@ def write_vts_3d(filename, z_values, nx, ny, spacing):
         f.write(f'  <StructuredGrid WholeExtent="{whole_extent}">\\n')
         f.write(f'    <Piece Extent="{whole_extent}">\\n')
 
-        # Точки
+        # Координаты с уже "поднятой" поверхностью
         f.write('      <Points>\\n')
         f.write('        <DataArray NumberOfComponents="3" type="Float32" format="ascii">\\n')
-
         points = []
         for j in range(ny):
             y = j * spacing
             for i in range(nx):
                 x = i * spacing
-                z = z_values[j, i]
+                z = z_values[j, i]  # Z = высота волны
                 points.append(f"{x:.5f} {y:.5f} {z:.5f}")
-
         f.write("          " + "\\n          ".join(points) + "\\n")
         f.write('        </DataArray>\\n')
         f.write('      </Points>\\n')
 
-        # Данные: амплитуда волны
+        # Данные: амплитуда волны (для цвета)
         f.write('      <PointData Scalars="amplitude">\\n')
         f.write('        <DataArray type="Float32" Name="amplitude" format="ascii">\\n')
         f.write("          " + "\\n          ".join([f"{v:.5f}" for v in z_values.flatten(order='C')]) + "\\n")
@@ -104,6 +134,7 @@ center = np.array([(NX*SPACING)/2, (NY*SPACING)/2])
 for t in range(TIME_STEPS):
     time_val = t * DT
 
+    # 3 источника волн
     Z = np.zeros_like(X)
 
     sources = [
@@ -114,9 +145,11 @@ for t in range(TIME_STEPS):
 
     for sx, sy, amp in sources:
         R = np.sqrt((X-sx)**2 + (Y-sy)**2)
+        # Бегущая волна с затуханием
         wave = amp * np.sin(R*4 - time_val*3) * np.exp(-R/1.5) * np.exp(-time_val*0.02)
         Z += wave
 
+    # Нормализация и смещение (чтобы поверхность не уходила глубоко вниз)
     Z = Z - np.min(Z) + 0.1
 
     filename = os.path.join(OUTPUT_DIR, f"wave3d_{t:04d}.vts")
@@ -131,32 +164,40 @@ print(f"Сгенерировано {TIME_STEPS} файлов в {OUTPUT_DIR}/")
     st.code(code_generate, language='python')
 
     st.markdown("""
-    **Параметры скрипта:**
-    - Сетка 50×50 точек
-    - 45 временных шагов
-    - Три источника волн с движущимися координатами
+    **Комментарии к скрипту:**
 
-    **Загрузка в ParaView:**
-    1. File → Open → выбрать `wave3d.pvd`
-    2. Apply
-    3. На панели инструментов появится ползунок времени
+    1. **Параметры** – задаются размеры сетки, шаг по пространству, число временных шагов и шаг по времени.
+    2. **Функция `write_vts_3d`** – записывает один `.vts` файл:
+        - Заголовок XML с указанием размера сетки.
+        - Блок `<Points>` – перечисляет координаты всех узлов, где z берётся из переданного массива `z_values`.
+        - Блок `<PointData>` – сохраняет амплитуду (высоту) как скалярное поле с именем `amplitude`.
+    3. **Функция `write_pvd`** – создаёт файл коллекции, который связывает все `.vts` файлы с соответствующими временными метками (`timestep`). Это позволяет ParaView воспринимать набор как временной ряд.
+    4. **Генерация волны** – для каждого временного шага вычисляется интерференция трёх источников. Координаты источников немного меняются во времени, создавая эффект движения. Используется затухание (`exp(-R/1.5)`) и общее затухание со временем (`exp(-time_val*0.02)`).
+    5. **Сохранение** – каждый кадр записывается в отдельный `.vts` файл с именем `wave3d_0000.vts`, `wave3d_0001.vts` и т.д. В конце создаётся `wave3d.pvd`.
+
+    #### Загрузка в ParaView
+    - Откройте ParaView.
+    - **File → Open...** выберите созданный файл `wave3d.pvd`.
+    - ParaView автоматически распознает временные шаги. На панели инструментов появится ползунок времени.
     """)
 
+# --- Раздел 2: Создание и настройка анимации ---
 elif menu == "Создание и настройка анимации":
 
-    st.markdown("### Programmable Source")
-
+    st.markdown("### Генерация анимированных данных через Programmable Source")
     st.markdown("""
-    **Programmable Source** — источник данных, создающий геометрию через Python-скрипты в процессе визуализации. Данные генерируются на лету для каждого временного шага.
+    **Programmable Source** — это источник данных в ParaView, который позволяет создавать геометрию непосредственно в процессе визуализации с помощью Python-скриптов. Данные генерируются на лету для каждого запрошенного временного шага.
 
     Чтобы создать анимированный источник:
-    1. Sources → Programmable Source
-    2. Заполнить два скрипта: Script и RequestInformation Script
+    1. Добавьте **Programmable Source** (Sources → Programmable Source).
+    2. В его свойствах заполните два скрипта:
+       - **Script** (основной скрипт генерации данных для текущего времени)
+       - **RequestInformation Script** (скрипт, сообщающий ParaView о доступных временных шагах)
     """)
 
-    st.markdown("#### Script")
+    st.markdown("#### Пример Script (генерация поверхности с волной)")
 
-    code_script = '''import vtk
+    code_ps_script = '''import vtk
 import math
 from paraview import vtk
 
@@ -178,18 +219,19 @@ dy = (ymax - ymin) / (ny - 1)
 points = vtk.vtkPoints()
 points.SetNumberOfPoints(nx * ny)
 
-# Генерация точек с волной
+# Генерируем точки с волной
 idx = 0
 for j in range(ny):
     y = ymin + j * dy
     for i in range(nx):
         x = xmin + i * dx
+        # Бегущая волна: z = sin( sqrt(x^2+y^2) - time*2pi )
         r = math.sqrt(x*x + y*y)
-        z = math.sin(r * 1.5 - time * 2 * math.pi)
+        z = math.sin(r * 1.5 - time * 2 * math.pi)  # волна распространяется наружу
         points.SetPoint(idx, x, y, z)
         idx += 1
 
-# Создание ячеек (квадраты)
+# Создаём ячейки (квадраты) для поверхности
 quads = vtk.vtkCellArray()
 for j in range(ny - 1):
     for i in range(nx - 1):
@@ -206,7 +248,7 @@ for j in range(ny - 1):
 output.SetPoints(points)
 output.SetPolys(quads)
 
-# Скаляр для раскраски
+# Добавим скаляр (Z координату) для раскраски
 scalars = vtk.vtkDoubleArray()
 scalars.SetName('Height')
 scalars.SetNumberOfValues(nx * ny)
@@ -216,68 +258,69 @@ output.GetPointData().AddArray(scalars)
 output.GetPointData().SetActiveScalars('Height')
 '''
 
-    st.code(code_script, language='python')
+    st.code(code_ps_script, language='python')
 
     st.markdown("""
-    **Что делает Script:**
-    - Получает текущее время из ParaView
-    - Создает сетку 40×40 точек
-    - Вычисляет z-координату как функцию от расстояния и времени (бегущая волна)
-    - Создает четырехугольные ячейки
-    - Добавляет скалярное поле Height для раскраски
+    **Пояснения к Script:**
+    - Извлекается текущее время `time`, запрошенное ParaView для анимации.
+    - Создаётся структурированная сетка (явно задаются точки и четырёхугольные ячейки).
+    - Для каждой точки вычисляется z-координата как функция времени, создающая эффект бегущей волны.
+    - Ячейки строятся как упорядоченные квадраты.
+    - Скалярное поле `Height` добавляется для раскраски.
     """)
 
-    st.markdown("#### RequestInformation Script")
+    st.markdown("#### Пример RequestInformation Script (объявление временных шагов)")
 
-    code_reqinfo = '''from paraview import vtk
+    code_ps_reqinfo = '''from paraview import vtk
 import numpy as np
 
 outInfo = self.GetOutputInformation(0)
 
-# Временные шаги
+# Определяем временные шаги
 timesteps = np.linspace(0, 5.0, 100).tolist()
 
-# Диапазон и список шагов
+# Устанавливаем диапазон и список шагов
 outInfo.Set(vtk.vtkStreamingDemandDrivenPipeline.TIME_RANGE(), [0.0, 5.0], 2)
 outInfo.Set(vtk.vtkStreamingDemandDrivenPipeline.TIME_STEPS(), timesteps, len(timesteps))
 '''
 
-    st.code(code_reqinfo, language='python')
+    st.code(code_ps_reqinfo, language='python')
 
     st.markdown("""
-    **Что делает RequestInformation:**
-    - Выполняется один раз при инициализации
-    - Сообщает ParaView о доступных временных шагах (от 0 до 5 с шагом 0.05)
-    - После этого появляется ползунок времени
-    - При изменении положения ползунка вызывается Script с соответствующим значением time
+    **Пояснения к RequestInformation:**
+    - Скрипт выполняется один раз для сообщения ParaView о доступных временных шагах.
+    - Указывается общий временной диапазон (`TIME_RANGE`).
+    - Передаётся список конкретных временных меток (`TIME_STEPS`), которые будут запрашиваться при анимации.
+    - После этого ParaView покажет ползунок времени с этими шагами, и при каждом изменении времени будет вызываться основной Script с соответствующим значением `time`.
     """)
 
-    st.markdown("### Использование")
+    st.markdown("#### Использование")
     st.markdown("""
-    1. Настроить Programmable Source с этими скриптами
-    2. Применить фильтры (например, Warp By Scalar для поднятия геометрии по Z)
-    3. Настроить цвет
-    4. Запустить анимацию — данные генерируются для каждого кадра
+    После настройки Programmable Source с этими скриптами можно применить к нему фильтры (например, **Warp By Scalar** для поднятия геометрии по Z), настроить цвет и запустить анимацию. Данные генерируются на лету для каждого кадра, что позволяет экспериментировать без создания файлов на диске.
     """)
 
+# --- Раздел 3: Экспорт анимации и примеры ---
 elif menu == "Экспорт анимации и примеры":
 
     st.markdown("### Сохранение анимации")
-
     st.markdown("""
     **File → Save Animation**
 
     **Форматы:**
-    - AVI, OGG, MP4 — видеофайлы
+    - AVI, OGG, MP4 — видеофайлы (через соответствующий кодек)
     - PNG, JPEG, TIFF, BMP — последовательности изображений
 
     **Параметры:**
-    - FrameRate — частота кадров (15, 24, 30 кадров/с)
+    - FrameRate — частота кадров (рекомендуемые значения: 15, 24, 30 кадров/с)
     - Разрешение
     - Кодек (для видео)
+
+    При сохранении в видеоформат можно управлять битрейтом и кодеком через дополнительные параметры (зависят от платформы).
     """)
 
     st.markdown("### Примеры готовых анимаций")
+    st.markdown(
+        "Ниже представлены четыре примера анимаций, созданных в ParaView (формат MP4, зацикленное воспроизведение).")
 
     video_dir = "video"
 
