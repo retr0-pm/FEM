@@ -95,7 +95,7 @@ def solve_navier_stokes_channel(mesh, boundaries, Re=100.0, H=1.0,
     # Функция тока
     psi = compute_stream_function(u_final, mesh)
 
-    # Площадь вихревой зоны
+    # Площадь вихревой зоны (psi < 0)
     S_vortex = 0.0
     dofmap_psi = psi.function_space().dofmap()
     psi_vals_all = psi.vector().get_local()
@@ -106,7 +106,13 @@ def solve_navier_stokes_channel(mesh, boundaries, Re=100.0, H=1.0,
             if np.min(psi_vals_all[dofs]) < 0:
                 S_vortex += cell.volume()
 
+    # Характеристики вихря
+    vortex_chars = compute_vortex_characteristics_ns(psi, mesh)
+
     print(f"  Площадь вихревой зоны: S = {S_vortex:.6f}")
+    print(f"  Характеристики вихря: psi_min = {vortex_chars['psi_min']:.4f}, "
+          f"x_attach = {vortex_chars['x_attach']:.4f}, "
+          f"высота = {vortex_chars['y_max_vortex']:.4f}")
 
     return {
         "velocity": u_final,
@@ -116,7 +122,12 @@ def solve_navier_stokes_channel(mesh, boundaries, Re=100.0, H=1.0,
         "S_vortex": S_vortex,
         "n_iterations": n_iter,
         "error_history": error_history,
-        "converged": converged
+        "converged": converged,
+        "psi_min": vortex_chars["psi_min"],
+        "x_attach": vortex_chars["x_attach"],
+        "y_max_vortex": vortex_chars["y_max_vortex"],
+        "x_vortex_center": vortex_chars["x_vortex_center"],
+        "y_vortex_center": vortex_chars["y_vortex_center"]
     }
 
 
@@ -124,52 +135,30 @@ def compute_stream_function(u, mesh):
     """
     Вычисляет функцию тока psi из поля скорости u
     путём интегрирования u1 по вертикали.
-
-    psi(x1, x2) = int_{x2_bottom}^{x2} u1(x1, xi) dxi + psi_bottom(x1)
     """
     V_psi = FunctionSpace(mesh, 'P', 2)
     psi_func = Function(V_psi)
 
-    # Получаем координаты и значения скорости
     coords = V_psi.tabulate_dof_coordinates()
-    u_vals = np.array([u(coord) for coord in coords])
-
-    # Находим границы
-    x2_min = mesh.coordinates()[:, 1].min()
-    l = 1.0  # длина уступа (геометрический параметр)
-
-    # Для каждой точки интегрируем u1 от нижней стенки до текущей высоты
     psi_vals = np.zeros(len(coords))
 
+    x2_min = mesh.coordinates()[:, 1].min()
+    l = 1.0
+
     for i, (x1, x2) in enumerate(coords):
-        # Нижняя граница для данного x1
         if x1 <= l:
-            x2_bottom = 0.0  # до уступа: нижняя стенка на x2 = 0
+            x2_bottom = 0.0
         else:
-            x2_bottom = x2_min  # после уступа: нижняя стенка на x2 = -h
+            x2_bottom = x2_min
 
-        # Интегрируем u1 по вертикали от x2_bottom до x2
-        n_pts = 50  # точек для численного интегрирования
-        xi_vals = np.linspace(x2_bottom, x2, n_pts)
-        dx = (x2 - x2_bottom) / (n_pts - 1)
-
+        n_pts = 100
+        xi = np.linspace(x2_bottom, x2, n_pts)
         integral = 0.0
-        for xi in xi_vals:
-            u1_val = u(np.array([x1, xi]))[0]
-            integral += u1_val * dx
 
-        # Трапецеидальное правило (уточнение концов)
-        u1_start = u(np.array([x1, x2_bottom]))[0]
-        u1_end = u(np.array([x1, x2]))[0]
-        integral = integral - 0.5 * dx * (u1_start + u1_end) + 0.5 * dx * (u1_start + u1_end)
-        # Проще: используем правило трапеций явно
-        integral = 0.0
         for j in range(n_pts - 1):
-            xi_a = xi_vals[j]
-            xi_b = xi_vals[j + 1]
-            u_a = u(np.array([x1, xi_a]))[0]
-            u_b = u(np.array([x1, xi_b]))[0]
-            integral += 0.5 * (u_a + u_b) * (xi_b - xi_a)
+            u_a = u(x1, xi[j])[0]
+            u_b = u(x1, xi[j+1])[0]
+            integral += 0.5 * (u_a + u_b) * (xi[j+1] - xi[j])
 
         psi_vals[i] = integral
 
@@ -177,3 +166,48 @@ def compute_stream_function(u, mesh):
     psi_func.vector().apply("insert")
 
     return psi_func
+
+
+def compute_vortex_characteristics_ns(psi, mesh):
+    """Вычисляет характеристики вихревой зоны для NS."""
+    psi_verts = psi.compute_vertex_values(mesh)
+    coords = mesh.coordinates()
+
+    psi_min = np.min(psi_verts)
+    idx_min = np.argmin(psi_verts)
+    x_vortex_center = coords[idx_min, 0]
+    y_vortex_center = coords[idx_min, 1]
+
+    L, l = 4.0, 1.0
+    x2_bottom = coords[:, 1].min()
+
+    bottom_pts = []
+    for i, (x1, x2) in enumerate(coords):
+        if x1 >= l and near(x2, x2_bottom, 1e-4):
+            bottom_pts.append((x1, psi_verts[i]))
+    bottom_pts.sort()
+
+    x_attach = l
+    for j in range(len(bottom_pts) - 1):
+        x1_a, psi_a = bottom_pts[j]
+        x1_b, psi_b = bottom_pts[j + 1]
+        if psi_a * psi_b <= 0 and x1_a > l:
+            if abs(psi_b - psi_a) > 1e-14:
+                x_attach = x1_a - psi_a * (x1_b - x1_a) / (psi_b - psi_a)
+            else:
+                x_attach = (x1_a + x1_b) / 2
+            break
+        elif psi_a > 0 and psi_b > 0 and x1_a > l:
+            x_attach = x1_a
+            break
+
+    vortex_pts = [(x1, x2) for i, (x1, x2) in enumerate(coords) if psi_verts[i] < 0]
+    y_max_vortex = max(pt[1] for pt in vortex_pts) if vortex_pts else x2_bottom
+
+    return {
+        "psi_min": psi_min,
+        "x_attach": x_attach,
+        "y_max_vortex": y_max_vortex,
+        "x_vortex_center": x_vortex_center,
+        "y_vortex_center": y_vortex_center
+    }
