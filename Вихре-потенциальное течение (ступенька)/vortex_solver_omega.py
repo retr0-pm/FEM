@@ -2,8 +2,8 @@
 Решатель задачи вихре-потенциального течения с зависимостью omega(psi).
 Поддерживает:
 - omega = const (обычная модель)
-- omega(psi) = omega0 * (1 + psi/psi_ref) (линейная)
-- omega(psi) = omega0 * exp(psi/psi_ref) (экспоненциальная)
+- omega(psi) = omega0 * (1 - alpha*|psi|/psi_ref) (линейная)
+- omega(psi) = omega0 * exp(-beta*|psi|/psi_ref) (экспоненциальная)
 """
 import numpy as np
 from dolfin import *
@@ -29,13 +29,11 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
     dx_custom = Measure("dx", domain=mesh)
     DG0 = FunctionSpace(mesh, 'DG', 0)
 
-    # Начальное приближение: Лаплас
     L0 = Constant(0.0) * phi * dx
     psi_k = Function(V)
     print("  Вычисление начального приближения (уравнение Лапласа)...")
     solve(a == L0, psi_k, bcs)
 
-    # Проверка наличия вихря
     psi_vals = psi_k.vector().get_local()
     dofmap = V.dofmap()
     has_vortex = False
@@ -74,7 +72,6 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
         error_history = []
         start_k = 0
 
-    # Итерационный процесс
     converged = False
     n_iter = start_k
     S_k = None
@@ -84,7 +81,6 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
     for k in range(start_k, max_iter):
         n_iter = k + 1
 
-        # Шаг 1: Определяем вихревую зону (psi < 0)
         psi_vals = psi_k.vector().get_local()
         marker_vals = np.zeros(DG0.dim())
 
@@ -98,14 +94,11 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
         vortex_marker.vector().set_local(marker_vals)
         vortex_marker.vector().apply("insert")
 
-        # Шаг 2: Площадь вихревой зоны
         S_k = assemble(vortex_marker * dx_custom)
         if abs(S_k) < 1e-14:
             print(f"  Итерация {k+1}: вихревая зона исчезла (S = 0).")
             break
 
-        # Шаг 3: Вычисляем omega(psi)
-        # Находим минимальное psi среди вихревых элементов
         psi_min_vals = []
         for cell in cells(mesh):
             cell_index = cell.index()
@@ -121,33 +114,26 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
         else:
             psi_ref_val = psi_ref
 
-        # Вычисляем omega в каждом вихревом элементе
         coords_DG = DG0.tabulate_dof_coordinates()
         omega_vals = np.zeros(DG0.dim())
 
-        # Для вычисления psi в центрах элементов интерполируем psi_k
         V_CG = FunctionSpace(mesh, 'P', degree)
         psi_interp = interpolate(psi_k, V_CG)
 
         for i in range(DG0.dim()):
             if marker_vals[i] > 0:
                 psi_i = psi_interp(coords_DG[i])
-                # Значение psi_i отрицательно, psi_ref_val > 0
                 if omega_model == "const":
                     omega_vals[i] = 1.0
                 elif omega_model == "linear":
-                    # omega = omega0 * (1 - alpha * |psi|/psi_ref)
-                    # где alpha и psi_ref — фиксированные параметры
                     alpha = 0.5
                     psi_ref_fixed = 0.3
                     omega_vals[i] = max(1.0 - alpha * abs(psi_i) / psi_ref_fixed, 0.2)
                 elif omega_model == "exp":
-                    # omega = omega0 * exp(psi/psi_ref)
                     omega_vals[i] = np.exp(0.5 * psi_i / psi_ref_val)
                 else:
                     raise ValueError(f"Неизвестная модель: {omega_model}")
 
-        # Нормируем так, чтобы интеграл по вихревой зоне равнялся Gamma
         omega_func = Function(DG0)
         omega_func.vector().set_local(omega_vals)
         omega_func.vector().apply("insert")
@@ -162,12 +148,10 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
         omega_func.vector().set_local(omega_vals * omega_scale)
         omega_func.vector().apply("insert")
 
-        # Шаг 4-5: Правая часть и решение
         L_rhs = omega_func * phi * dx
         psi_new = Function(V)
         solve(a == L_rhs, psi_new, bcs)
 
-        # Шаг 6: Сходимость
         diff = Function(V)
         diff.vector().set_local(psi_new.vector().get_local() - psi_k.vector().get_local())
         diff.vector().apply("insert")
@@ -187,6 +171,9 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
     if not converged and n_iter > 0:
         print(f"  Внимание: не сошлось за {max_iter} итераций!")
 
+    # Характеристики вихря
+    vortex_chars = compute_vortex_characteristics(psi_k, mesh)
+
     results = {
         "psi": psi_k,
         "omega_scale": omega_scale,
@@ -195,8 +182,59 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
         "error_history": error_history,
         "converged": converged,
         "omega_model": omega_model,
-        "psi_ref": psi_ref_val
+        "psi_min": vortex_chars["psi_min"],
+        "x_attach": vortex_chars["x_attach"],
+        "y_max_vortex": vortex_chars["y_max_vortex"],
+        "x_vortex_center": vortex_chars["x_vortex_center"],
+        "y_vortex_center": vortex_chars["y_vortex_center"]
     }
 
     print(f"  Готово: {n_iter} итераций, модель={omega_model}, S={S_k:.6f}")
+    print(f"  Характеристики вихря: psi_min = {vortex_chars['psi_min']:.4f}, "
+          f"x_attach = {vortex_chars['x_attach']:.4f}")
     return results
+
+
+def compute_vortex_characteristics(psi, mesh):
+    """Вычисляет характеристики вихревой зоны."""
+    psi_verts = psi.compute_vertex_values(mesh)
+    coords = mesh.coordinates()
+
+    psi_min = np.min(psi_verts)
+    idx_min = np.argmin(psi_verts)
+    x_vortex_center = coords[idx_min, 0]
+    y_vortex_center = coords[idx_min, 1]
+
+    L, l = 4.0, 1.0
+    x2_bottom = coords[:, 1].min()
+
+    bottom_pts = []
+    for i, (x1, x2) in enumerate(coords):
+        if x1 >= l and near(x2, x2_bottom, 1e-4):
+            bottom_pts.append((x1, psi_verts[i]))
+    bottom_pts.sort()
+
+    x_attach = l
+    for j in range(len(bottom_pts) - 1):
+        x1_a, psi_a = bottom_pts[j]
+        x1_b, psi_b = bottom_pts[j + 1]
+        if psi_a * psi_b <= 0 and x1_a > l:
+            if abs(psi_b - psi_a) > 1e-14:
+                x_attach = x1_a - psi_a * (x1_b - x1_a) / (psi_b - psi_a)
+            else:
+                x_attach = (x1_a + x1_b) / 2
+            break
+        elif psi_a > 0 and psi_b > 0 and x1_a > l:
+            x_attach = x1_a
+            break
+
+    vortex_pts = [(x1, x2) for i, (x1, x2) in enumerate(coords) if psi_verts[i] < 0]
+    y_max_vortex = max(pt[1] for pt in vortex_pts) if vortex_pts else x2_bottom
+
+    return {
+        "psi_min": psi_min,
+        "x_attach": x_attach,
+        "y_max_vortex": y_max_vortex,
+        "x_vortex_center": x_vortex_center,
+        "y_vortex_center": y_vortex_center
+    }
