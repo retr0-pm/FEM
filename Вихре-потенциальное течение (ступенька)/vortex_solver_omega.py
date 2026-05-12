@@ -77,6 +77,7 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
     S_k = None
     omega_scale = 0.0
     psi_ref_val = 0.0
+    final_omega_func = None
 
     for k in range(start_k, max_iter):
         n_iter = k + 1
@@ -163,6 +164,7 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
               f"scale = {omega_scale:.6f}, error = {error:.3e}")
 
         psi_k.assign(psi_new)
+        final_omega_func = omega_func
 
         if error < tol:
             converged = True
@@ -173,6 +175,9 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
 
     # Характеристики вихря
     vortex_chars = compute_vortex_characteristics(psi_k, mesh)
+
+    # Профили psi и omega вдоль линии x1 = 1.5
+    profiles = compute_profiles(psi_k, final_omega_func, mesh, degree)
 
     results = {
         "psi": psi_k,
@@ -186,13 +191,47 @@ def solve_vortex_channel_omega(mesh, boundaries, degree=1, Gamma=-2.0, H=1.0, h=
         "x_attach": vortex_chars["x_attach"],
         "y_max_vortex": vortex_chars["y_max_vortex"],
         "x_vortex_center": vortex_chars["x_vortex_center"],
-        "y_vortex_center": vortex_chars["y_vortex_center"]
+        "y_vortex_center": vortex_chars["y_vortex_center"],
+        "profiles": profiles
     }
 
     print(f"  Готово: {n_iter} итераций, модель={omega_model}, S={S_k:.6f}")
     print(f"  Характеристики вихря: psi_min = {vortex_chars['psi_min']:.4f}, "
           f"x_attach = {vortex_chars['x_attach']:.4f}")
     return results
+
+
+def compute_profiles(psi, omega_func, mesh, degree):
+    """
+    Вычисляет профили psi(x2) и omega(x2) вдоль линии x1 = 1.5.
+    Возвращает словарь с массивами x2, psi_vals, omega_vals.
+    """
+    # Координата x1 для профиля (через центр вихря)
+    x1_profile = 1.5
+
+    # Диапазон x2 от нижней стенки до нуля (граница вихря примерно здесь)
+    x2_min = mesh.coordinates()[:, 1].min()
+    n_pts = 50
+    x2_vals = np.linspace(x2_min, 0.0, n_pts)
+
+    # Интерполируем psi на линию
+    V_psi = psi.function_space()
+    psi_vals = np.array([psi(x1_profile, x2) for x2 in x2_vals])
+
+    # Интерполируем omega на линию
+    # omega_func на DG0 — берём значение в ячейке
+    omega_vals = np.zeros(n_pts)
+    for i, x2 in enumerate(x2_vals):
+        try:
+            omega_vals[i] = omega_func(x1_profile, x2)
+        except:
+            omega_vals[i] = 0.0
+
+    return {
+        "x2": x2_vals.tolist(),
+        "psi": psi_vals.tolist(),
+        "omega": omega_vals.tolist()
+    }
 
 
 def compute_vortex_characteristics(psi, mesh):

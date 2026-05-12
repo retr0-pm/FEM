@@ -3,6 +3,7 @@
 Сравнение моделей: const, linear, exp.
 """
 import os
+import json
 import numpy as np
 import meshio
 from dolfin import *
@@ -143,6 +144,43 @@ def plot_and_save(psi, mesh, file_prefix, h_val, title=""):
     return psi_path, stream_path
 
 
+def plot_profiles(all_results, RESULTS_DIR):
+    """Строит графики профилей psi и omega для всех моделей."""
+    colors = {'const': '#2196F3', 'linear': '#4CAF50', 'exp': '#FF9800'}
+    model_names = {'const': 'const', 'linear': 'linear', 'exp': 'exp'}
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+    for res in all_results:
+        model = res['model']
+        profiles = res['profiles']
+        x2 = np.array(profiles['x2'])
+        psi_vals = np.array(profiles['psi'])
+        omega_vals = np.array(profiles['omega'])
+
+        ax1.plot(x2, psi_vals, color=colors[model], linewidth=2, label=model)
+        ax2.plot(x2, omega_vals, color=colors[model], linewidth=2, label=model)
+
+    ax1.set_xlabel('x₂')
+    ax1.set_ylabel('ψ')
+    ax1.set_title('Профиль ψ(x₂) при x₁ = 1.5')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    ax2.set_xlabel('x₂')
+    ax2.set_ylabel('ω')
+    ax2.set_title('Профиль ω(x₂) при x₁ = 1.5')
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+
+    fig.tight_layout()
+    profiles_path = os.path.join(RESULTS_DIR, "profiles_comparison.png")
+    fig.savefig(profiles_path, dpi=150)
+    plt.close(fig)
+    print(f"  Сохранено: {profiles_path}")
+    return profiles_path
+
+
 if __name__ == "__main__":
     h_val = 1.0
     level = "level3"
@@ -187,7 +225,7 @@ if __name__ == "__main__":
         file_prefix = f"omega_{model}_h{h_val}_{level}_p{p}"
         psi_path, stream_path = plot_and_save(
             results["psi"], mesh, file_prefix, h_val,
-            title=f"$\\omega$ model: {model}, $h={h_val}$, $\\Gamma={Gamma_val}$"
+            title=f"omega model: {model}, h={h_val}, Gamma={Gamma_val}"
         )
 
         if len(results["error_history"]) > 0:
@@ -224,15 +262,33 @@ if __name__ == "__main__":
             "converged": results["converged"],
             "psi_path": psi_path,
             "stream_path": stream_path,
-            "conv_path": conv_path
+            "conv_path": conv_path,
+            "profiles": results["profiles"]
         })
 
         print(f"  S = {results['S']:.6f}, scale = {results['omega_scale']:.6f}, "
               f"итераций = {results['n_iterations']}")
 
+    # Строим профили
+    profiles_path = plot_profiles(all_results, RESULTS_DIR)
+
+    # Сохраняем результаты
+    df_data = []
+    for res in all_results:
+        row = {k: v for k, v in res.items() if k != 'profiles'}
+        df_data.append(row)
+
     import pandas as pd
-    df = pd.DataFrame(all_results)
+    df = pd.DataFrame(df_data)
     csv_path = os.path.join(RESULTS_DIR, "omega_results.csv")
     df.to_csv(csv_path, index=False)
+
+    # Сохраняем профили в JSON
+    profiles_data = {res['model']: res['profiles'] for res in all_results}
+    profiles_json_path = os.path.join(RESULTS_DIR, "profiles.json")
+    with open(profiles_json_path, 'w') as f:
+        json.dump(profiles_data, f, indent=2)
+
     print(f"\nРезультаты сохранены: {csv_path}")
+    print(f"Профили сохранены: {profiles_json_path}")
     print(f"Всего вариантов: {len(all_results)}")
