@@ -110,7 +110,6 @@ elif menu == "Результаты NS":
 
         st.markdown("---")
 
-        # График S(Re)
         if len(df_ns) >= 2:
             st.markdown("**Зависимость характеристик вихря от Re:**")
             col1, col2 = st.columns(2)
@@ -133,17 +132,38 @@ elif menu == "Результаты NS":
                 fig.tight_layout()
                 st.pyplot(fig)
 
-        st.markdown("---")
+            st.markdown("**Зависимость $\psi_{min}$ и центра вихря от Re:**")
+            col1, col2 = st.columns(2)
+            with col1:
+                fig, ax = plt.subplots(figsize=(6, 4))
+                ax.plot(df_ns['Re'].values, df_ns['psi_min'].values, 'o-', markersize=8, color='purple')
+                ax.set_xlabel('$Re$')
+                ax.set_ylabel('$\psi_{min}$')
+                ax.set_title('Минимум функции тока')
+                ax.grid(True, alpha=0.3)
+                fig.tight_layout()
+                st.pyplot(fig)
+            with col2:
+                fig, ax = plt.subplots(figsize=(6, 4))
+                ax.plot(df_ns['Re'].values, df_ns['x_vortex_center'].values, 'o-', markersize=8, label=r'$x_{центр}$')
+                ax.plot(df_ns['Re'].values, df_ns['y_vortex_center'].values, 's-', markersize=8, label=r'$y_{центр}$')
+                ax.set_xlabel('$Re$')
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+                fig.tight_layout()
+                st.pyplot(fig)
 
-        # Графики
+        st.markdown("---")
         st.markdown("**Поля функции тока и скорости:**")
+
         Re_select = st.selectbox("Выберите число Рейнольдса", sorted(df_ns['Re'].unique()))
 
         selected = df_ns[df_ns['Re'] == Re_select]
         if len(selected) > 0:
             row = selected.iloc[0]
 
-            tab1, tab2, tab3 = st.tabs(["Функция тока", "Линии тока", "Поле скорости"])
+            tab1, tab2, tab3, tab4 = st.tabs(["Функция тока", "Линии тока", "Поле скорости", "Сходимость"])
+
             with tab1:
                 if os.path.exists(row['psi_path']):
                     st.image(row['psi_path'], caption=f"$\psi$, $Re={Re_select}$", use_container_width=True)
@@ -153,11 +173,10 @@ elif menu == "Результаты NS":
             with tab3:
                 if os.path.exists(row['vel_path']):
                     st.image(row['vel_path'], caption=f"Поле скорости, $Re={Re_select}$", use_container_width=True)
-
-            conv_file = row['conv_path']
-            if os.path.exists(conv_file) and str(conv_file) != "nan" and conv_file != "":
-                st.markdown("**Сходимость итераций Пикара:**")
-                st.image(conv_file, use_container_width=True)
+            with tab4:
+                conv_file = row['conv_path']
+                if os.path.exists(conv_file) and str(conv_file) != "nan" and conv_file != "":
+                    st.image(conv_file, caption=f"Сходимость Пикара, $Re={Re_select}$", use_container_width=True)
 
             st.markdown("**Параметры:**")
             c1, c2, c3, c4, c5 = st.columns(5)
@@ -206,7 +225,7 @@ elif menu == "Сравнение с вихре-потенциальной":
         **Сравнение для базового варианта:** $h = 1.0$, сетка level3
 
         Сравниваются:
-        - Навье-Стокс при $Re = 25, 50, 100$
+        - Навье-Стокс при различных $Re$
         - Вихре-потенциальная модель при $\Gamma = -1, -2, -4$
         """)
 
@@ -214,40 +233,75 @@ elif menu == "Сравнение с вихре-потенциальной":
                            (df_vp['level'] == 'level3') &
                            (df_vp['degree'] == 2)]
 
-        st.markdown("**Площадь вихревой зоны $S$:**")
+        # Выбор типа графика и параметров
+        st.markdown("**Выберите тип сравнения:**")
+        compare_type = st.radio("Тип графика:",
+                                ["Линии тока", "Цветовая карта $\psi$", "Поле скорости (только NS)"])
+
+        if compare_type == "Поле скорости (только NS)":
+            st.markdown("**Поле скорости Навье-Стокса:**")
+            Re_sel = st.selectbox("Re (Навье-Стокс)", sorted(df_ns['Re'].unique()), key='comp_vel')
+            ns_row = df_ns[df_ns['Re'] == Re_sel].iloc[0]
+            if os.path.exists(ns_row['vel_path']):
+                st.image(ns_row['vel_path'], caption=f"Навье-Стокс: $Re={Re_sel}$", use_container_width=True)
+
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                Re_sel = st.selectbox("Re (Навье-Стокс)", sorted(df_ns['Re'].unique()), key='comp_ns')
+            with col2:
+                Gamma_sel = st.selectbox("Γ (вихре-потенциальная)",
+                                         sorted(df_vp_base['Gamma'].unique()), key='comp_vp')
+
+            ns_row = df_ns[df_ns['Re'] == Re_sel].iloc[0]
+            vp_row = df_vp_base[df_vp_base['Gamma'] == Gamma_sel].iloc[0]
+
+            col1, col2 = st.columns(2)
+            if compare_type == "Линии тока":
+                with col1:
+                    if os.path.exists(ns_row['stream_path']):
+                        st.image(ns_row['stream_path'],
+                                 caption=f"Навье-Стокс: $Re={Re_sel}$", use_container_width=True)
+                with col2:
+                    if os.path.exists(vp_row['stream_path']):
+                        st.image(vp_row['stream_path'],
+                                 caption=f"Вихре-потенциальная: $\\Gamma={Gamma_sel}$", use_container_width=True)
+            elif compare_type == "Цветовая карта $\psi$":
+                with col1:
+                    if os.path.exists(ns_row['psi_path']):
+                        st.image(ns_row['psi_path'],
+                                 caption=f"Навье-Стокс: $Re={Re_sel}$", use_container_width=True)
+                with col2:
+                    if os.path.exists(vp_row['psi_path']):
+                        st.image(vp_row['psi_path'],
+                                 caption=f"Вихре-потенциальная: $\\Gamma={Gamma_sel}$", use_container_width=True)
+
+        # Таблицы сравнения
+        st.markdown("---")
+        st.markdown("**Сравнение характеристик:**")
+
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("**Навье-Стокс:**")
-            ns_table = df_ns[['Re', 'S_vortex']].copy()
-            ns_table['S_vortex'] = ns_table['S_vortex'].apply(lambda x: f"{x:.4f}")
-            ns_table = ns_table.rename(columns={'Re': 'Параметр', 'S_vortex': 'S'})
+            st.markdown("**Навье-Стокс (все Re):**")
+            ns_table = df_ns[['Re', 'S_vortex', 'psi_min', 'x_attach', 'y_max_vortex']].copy()
+            for col in ['S_vortex', 'psi_min', 'x_attach', 'y_max_vortex']:
+                ns_table[col] = ns_table[col].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "")
+            ns_table = ns_table.rename(columns={
+                'Re': 'Re', 'S_vortex': 'S', 'psi_min': 'ψ_min',
+                'x_attach': 'x_прис', 'y_max_vortex': 'y_max'
+            })
             st.dataframe(ns_table, use_container_width=True, hide_index=True)
+
         with col2:
             st.markdown("**Вихре-потенциальная:**")
-            vp_table = df_vp_base[['Gamma', 'S']].copy()
-            vp_table['S'] = vp_table['S'].apply(lambda x: f"{x:.4f}")
-            vp_table = vp_table.rename(columns={'Gamma': 'Параметр', 'S': 'S'})
+            vp_table = df_vp_base[['Gamma', 'S', 'psi_min', 'x_attach', 'y_max_vortex']].copy()
+            for col in ['S', 'psi_min', 'x_attach', 'y_max_vortex']:
+                vp_table[col] = vp_table[col].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "")
+            vp_table = vp_table.rename(columns={
+                'Gamma': 'Γ', 'S': 'S', 'psi_min': 'ψ_min',
+                'x_attach': 'x_прис', 'y_max_vortex': 'y_max'
+            })
             st.dataframe(vp_table, use_container_width=True, hide_index=True)
-
-        st.markdown("---")
-        st.markdown("**Сравнение линий тока:**")
-
-        Re_sel = st.selectbox("Re (Навье-Стокс)", sorted(df_ns['Re'].unique()), key='comp_re')
-        Gamma_sel = st.selectbox("Γ (вихре-потенциальная)",
-                                 sorted(df_vp_base['Gamma'].unique()), key='comp_gamma')
-
-        ns_row = df_ns[df_ns['Re'] == Re_sel].iloc[0]
-        vp_row = df_vp_base[df_vp_base['Gamma'] == Gamma_sel].iloc[0]
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if os.path.exists(ns_row['stream_path']):
-                st.image(ns_row['stream_path'],
-                         caption=f"Навье-Стокс: $Re={Re_sel}$", use_container_width=True)
-        with col2:
-            if os.path.exists(vp_row['stream_path']):
-                st.image(vp_row['stream_path'],
-                         caption=f"Вихре-потенциальная: $\\Gamma={Gamma_sel}$", use_container_width=True)
 
         st.markdown("---")
         st.markdown("""
@@ -255,10 +309,11 @@ elif menu == "Сравнение с вихре-потенциальной":
 
         | Особенность | Навье-Стокс | Вихре-потенциальная |
         |-------------|-------------|---------------------|
-        | Форма вихря | Вытянутая, с плавной границей | Компактная, с чёткой границей $\psi=0$ |
+        | Форма вихря | Вытянутая, с плавной границей | Компактная, с изломом на $\psi=0$ |
         | Точка присоединения | На нижней стенке | Внутри области |
         | Вторичные вихри | Есть (угловой вихрь) | Отсутствуют |
         | Зависимость от параметра | $S$ растёт с $Re$ | $S$ растёт с $\|\Gamma\|$ |
+        | $\psi_{min}$ | Растёт по модулю с $Re$ | Определяется $\Gamma$ |
         """)
     else:
         st.warning("Не все данные загружены.")
@@ -281,25 +336,32 @@ elif menu == "Выводы":
     **1. Сходимость метода Пикара:**
 
     - С ростом $Re$ сходимость замедляется
-    - При $Re=25$ сходимость быстрая монотонная
-    - При $Re=100$ появляются осцилляции, но метод сходится
+    - При малых $Re$ сходимость быстрая монотонная
+    - При $Re \ge 50$ появляются осцилляции, но метод сходится
 
     **2. Характеристики вихревой зоны:**
 
     - Площадь вихря $S$ растёт с увеличением $Re$
     - Точка присоединения $x_{прис}$ смещается вправо
     - Максимальная высота вихря $y_{max}$ увеличивается
+    - $|\psi_{min}|$ растёт — вихрь становится интенсивнее
 
-    **3. Сравнение с вихре-потенциальной моделью:**
+    **3. Вторичный угловой вихрь:**
+
+    - При малых и умеренных $Re$ обнаружен вторичный вихрь под уступом
+    - Имеет треугольную форму, прилегающую к стенкам
+    - С ростом $Re$ может отрываться от угла
+
+    **4. Сравнение с вихре-потенциальной моделью:**
 
     - В модели Навье-Стокса вихрь более вытянутый и занимает большую площадь
     - Точка присоединения в NS находится на нижней стенке, в VP — внутри области
-    - В NS обнаружен вторичный угловой вихрь (эффект Моффатта)
-    - Форма вихря в NS плавная, в VP — с изломом на границе $\psi=0$
+    - В NS есть вторичные вихри, в VP отсутствуют
+    - Форма вихря в NS плавная, в VP — с изломом на $\psi=0$
 
-    **4. Физические особенности:**
+    **5. Физические особенности:**
 
-    - Профиль скорости Пуазейля на входе перестраивается в сдвиговый профиль за уступом
+    - Профиль Пуазейля на входе перестраивается в сдвиговый профиль за уступом
     - При увеличении $Re$ отрывная зона удлиняется
-    - Для более высоких $Re$ может потребоваться более длинный канал
+    - При $Re \ge 100$ вихревая зона приближается к выходной границе — требуется более длинный канал
     """)
