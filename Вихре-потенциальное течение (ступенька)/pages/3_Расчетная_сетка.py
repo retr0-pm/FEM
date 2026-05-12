@@ -118,23 +118,11 @@ elif menu == "Параметры сеток":
         st.info("Запустите генератор сеток: `python generate_meshes.py`")
 
 elif menu == "Код генератора":
-    st.markdown("##### Код генератора сетки")
+    st.markdown("##### Код генератора сеток и визуализации")
+    code_choice = st.radio("Выберите код:", ["Генерация сеток", "Визуализация"])
 
-    code = '''import gmsh
-import sys
-import os
-import json
-import meshio
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import numpy as np
-
-# Пути
-PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-MESH_DIR = os.path.join(PROJECT_DIR, "meshes")
-os.makedirs(MESH_DIR, exist_ok=True)
-
+    if code_choice == "Генерация сеток":
+        code_gen = '''
 # ПАРАМЕТРЫ ГЕОМЕТРИИ (фиксированные)
 L = 4.0   # длина канала
 H = 1.0   # высота канала
@@ -152,10 +140,8 @@ scales = [1.0, 0.25, 0.0625]
 # Высоты уступа
 h_values = [0.5, 1.0, 1.5]
 
-stats = []
-
 for h in h_values:
-    print(f"\n{'='*60}")
+    print(f"\\n{'='*60}")
     print(f"ГЕОМЕТРИЯ С ВЫСОТОЙ УСТУПА h = {h}")
     print(f"{'='*60}")
 
@@ -202,7 +188,7 @@ for h in h_values:
     # ПОСЛЕДОВАТЕЛЬНАЯ ГЕНЕРАЦИЯ ТРЁХ СЕТОК
     for i, scale in enumerate(scales):
         level = f"level{i+1}"
-        print(f"\n  Сетка {level}: масштаб = {scale}")
+        print(f"\\n  Сетка {level}: масштаб = {scale}")
 
         # Очищаем предыдущую сетку и поля
         gmsh.model.mesh.clear()
@@ -238,94 +224,115 @@ for h in h_values:
         gmsh.write(msh_path)
         print(f"    MSH сохранён: {msh_name}")
 
-        # === СТАТИСТИКА И ВИЗУАЛИЗАЦИЯ (добавлено для Streamlit) ===
-
-        # Читаем сетку через meshio
-        mesh = meshio.read(msh_path)
-        points = mesh.points[:, :2]
-        triangles = mesh.cells_dict["triangle"]
-        lines = mesh.cells_dict["line"]
-        line_data = mesh.cell_data_dict["gmsh:physical"]["line"]
-
-        # Количество узлов и элементов
-        nodes = points.shape[0]
-        elements = triangles.shape[0]
-
-        # Рисуем сетку с цветными границами
-        x, y = points[:, 0], points[:, 1]
-        fig, ax = plt.subplots(figsize=(10, 4))
-
-        # Заливка области
-        ax.tripcolor(x, y, triangles, np.ones(len(x)),
-                     shading='flat', alpha=0.15, cmap='Blues')
-
-        # Сетка
-        ax.triplot(x, y, triangles, color='#4a6fa5', linewidth=0.5)
-
-        # Цветные границы
-        colors = {1: "red", 2: "green", 3: "blue", 4: "purple"}
-        for line, tag in zip(lines, line_data):
-            pts = points[line]
-            ax.plot(pts[:, 0], pts[:, 1], color=colors.get(tag, "black"), linewidth=2.0)
-
-        # Оси
-        ax.set_xlabel(r"$x_1$", fontsize=12)
-        ax.set_ylabel(r"$x_2$", fontsize=12)
-
-        # Координаты середин границ
-        # Вход (Gamma3): x1 = 0, x2 от 0 до H -> середина x2 = H/2
-        x3, y3 = 0, H / 2
-        # Выход (Gamma4): x1 = L, x2 от -h до H -> середина x2 = (H - h)/2
-        x4, y4 = L, (H - h) / 2
-        # Верхняя стенка (Gamma2): x1 от 0 до L, x2 = H
-        x2, y2 = L / 2, H
-        # Нижняя стенка после уступа (Gamma1): x1 от l до L, x2 = -h
-        x1, y1 = (l + L) / 2, -h
-
-        # Подписи со смещением 0.2 от границы наружу
-        ax.text(x3 - 0.2, y3, r"$\Gamma_3$", rotation=90, va='center', ha='right', fontsize=13)
-        ax.text(x4 + 0.2, y4, r"$\Gamma_4$", rotation=90, va='center', ha='left', fontsize=13)
-        ax.text(x2, y2 + 0.2, r"$\Gamma_2$", ha='center', va='bottom', fontsize=13)
-        ax.text(x1, y1 - 0.2, r"$\Gamma_1$", ha='center', va='top', fontsize=13)
-
-        # Область
-        ax.text(2, (H - h) / 2, f"$\Omega$\n$h={h}$", fontsize=14, alpha=0.6, ha='center')
-
-        # Настройка осей
-        ax.set_aspect('equal')
-        margin = 0.6
-        ax.set_xlim(-margin, L + margin)
-        ax.set_ylim(-h - margin, H + margin)
-        ax.grid(False)
-        fig.tight_layout()
-
-        # Сохраняем PNG
-        png_name = f"channel_step_mesh_h{h}_{level}.png"
-        png_path = os.path.join(MESH_DIR, png_name)
-        fig.savefig(png_path, dpi=200)
-        plt.close(fig)
-        print(f"    PNG сохранён: {png_name}")
-
-        # Собираем статистику
-        stats.append({
-            "h": h,
-            "level": level,
-            "factor": scale,
-            "nodes": nodes,
-            "elements": elements,
-            "msh": msh_path,
-            "png": png_path
-        })
-
     gmsh.finalize()
+'''
+        st.code(code_gen, language="python")
+
+    else:  # Визуализация
+        code_vis = '''
+stats = []
+for msh_name in msh_files:
+    base = msh_name.replace(".msh", "")
+    parts = base.split("_")
+    # Извлекаем высоту уступа h из имени файла
+    h_part = [p for p in parts if p.startswith("h")][0]
+    h = float(h_part[1:])
+    # Извлекаем уровень сгущения level
+    level_part = [p for p in parts if p.startswith("level")][0]
+    level = level_part
+
+    msh_path = os.path.join(MESH_DIR, msh_name)
+
+    # Читаем сетку через meshio
+    mesh = meshio.read(msh_path)
+    points = mesh.points[:, :2]
+    triangles = mesh.cells_dict["triangle"]
+    lines = mesh.cells_dict["line"]
+    line_data = mesh.cell_data_dict["gmsh:physical"]["line"]
+
+    # Количество узлов и элементов
+    nodes = points.shape[0]
+    elements = triangles.shape[0]
+
+    # Масштабный коэффициент для информации
+    scale_map = {"level1": 1.0, "level2": 0.25, "level3": 0.0625}
+    factor = scale_map.get(level, None)
+
+    # Параметры геометрии для подписей
+    L = 4.0
+    H = 1.0
+    l = 1.0
+
+    # Рисуем сетку с цветными границами
+    x, y = points[:, 0], points[:, 1]
+    fig, ax = plt.subplots(figsize=(10, 4))
+
+    # Заливка области
+    ax.tripcolor(x, y, triangles, np.ones(len(x)),
+                 shading='flat', alpha=0.15, cmap='Blues')
+
+    # Сетка
+    ax.triplot(x, y, triangles, color='#4a6fa5', linewidth=0.5)
+
+    # Цветные границы
+    colors = {1: "red", 2: "green", 3: "blue", 4: "purple"}
+    for line, tag in zip(lines, line_data):
+        pts = points[line]
+        ax.plot(pts[:, 0], pts[:, 1], color=colors.get(tag, "black"), linewidth=2.0)
+
+    # Оси
+    ax.set_xlabel(r"$x_1$", fontsize=12)
+    ax.set_ylabel(r"$x_2$", fontsize=12)
+
+    # Координаты середин границ
+    # Вход (Gamma3): x1 = 0, x2 от 0 до H -> середина x2 = H/2
+    x3, y3 = 0, H / 2
+    # Выход (Gamma4): x1 = L, x2 от -h до H -> середина x2 = (H - h)/2
+    x4, y4 = L, (H - h) / 2
+    # Верхняя стенка (Gamma2): x1 от 0 до L, x2 = H
+    x2, y2 = L / 2, H
+    # Нижняя стенка после уступа (Gamma1): x1 от l до L, x2 = -h
+    x1, y1 = (l + L) / 2, -h
+
+    # Подписи со смещением 0.2 от границы наружу
+    ax.text(x3 - 0.2, y3, r"$\\Gamma_3$", rotation=90, va='center', ha='right', fontsize=13)
+    ax.text(x4 + 0.2, y4, r"$\\Gamma_4$", rotation=90, va='center', ha='left', fontsize=13)
+    ax.text(x2, y2 + 0.2, r"$\\Gamma_2$", ha='center', va='bottom', fontsize=13)
+    ax.text(x1, y1 - 0.2, r"$\\Gamma_1$", ha='center', va='top', fontsize=13)
+
+    # Область
+    ax.text(2, (H - h) / 2, f"$\\Omega$\\n$h={h}$", fontsize=14, alpha=0.6, ha='center')
+
+    # Настройка осей
+    ax.set_aspect('equal')
+    margin = 0.6
+    ax.set_xlim(-margin, L + margin)
+    ax.set_ylim(-h - margin, H + margin)
+    ax.grid(False)
+    fig.tight_layout()
+
+    # Сохраняем PNG
+    png_name = base + ".png"
+    png_path = os.path.join(MESH_DIR, png_name)
+    fig.savefig(png_path, dpi=200)
+    plt.close(fig)
+
+    # Собираем статистику
+    stats.append({
+        "h": h,
+        "level": level,
+        "factor": factor,
+        "nodes": nodes,
+        "elements": elements,
+        "msh": msh_path,
+        "png": png_path
+    })
 
 # Сохраняем stats.json для Streamlit
 stats_path = os.path.join(MESH_DIR, "stats.json")
 with open(stats_path, 'w', encoding='utf-8') as f:
     json.dump(stats, f, indent=2, ensure_ascii=False)
-print(f"\n{'='*60}")
-print(f"Статистика сохранена: {stats_path}")
-print(f"Всего сеток: {len(stats)}")
-'''
 
-    st.code(code, language="python")
+print(f"Визуализация завершена. Обработано {len(stats)} файлов. Статистика сохранена в {stats_path}")
+'''
+        st.code(code_vis, language="python")
