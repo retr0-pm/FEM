@@ -26,22 +26,6 @@ if os.path.exists(csv_file):
 else:
     df = None
 
-
-def filter_df(df, filters):
-    """Применяет словарь фильтров {column: value} к датафрейму."""
-    result = df.copy()
-    for col, val in filters.items():
-        if val is not None and val != "Все":
-            result = result[result[col] == val]
-    return result
-
-
-def get_available_values(df, column, filters):
-    """Возвращает отсортированные уникальные значения колонки с учётом фильтров."""
-    filtered = filter_df(df, filters)
-    return sorted(filtered[column].unique().tolist())
-
-
 if menu == "Сводная таблица":
     st.markdown("##### Сводная таблица результатов")
 
@@ -63,9 +47,8 @@ if menu == "Сводная таблица":
         with col4:
             df_p = df_l if p_filter == "Все" else df_l[df_l['degree'] == int(p_filter)]
             gamma_vals = ["Все"] + sorted(df_p['Gamma'].unique().tolist())
-            gamma_filter = st.selectbox("$\Gamma$", gamma_vals)
+            gamma_filter = st.selectbox("Γ", gamma_vals)
 
-        # Применяем все фильтры
         df_filtered = df.copy()
         if h_filter != "Все":
             df_filtered = df_filtered[df_filtered['h'] == float(h_filter)]
@@ -82,7 +65,7 @@ if menu == "Сводная таблица":
             df_display = df_filtered[[
                 'h', 'Gamma', 'level', 'degree', 'nodes', 'cells',
                 'omega', 'S', 'psi_min', 'x_attach', 'y_max_vortex',
-                'x_vortex_center', 'y_vortex_center', 'n_iterations', 'converged'
+                'x_vortex_center', 'y_vortex_center', 'n_iterations'
             ]].copy()
 
             for col in ['omega', 'S', 'psi_min', 'x_attach', 'y_max_vortex',
@@ -96,7 +79,7 @@ if menu == "Сводная таблица":
                 'psi_min': 'ψ_min', 'x_attach': 'x_прис',
                 'y_max_vortex': 'y_max', 'x_vortex_center': 'x_центр',
                 'y_vortex_center': 'y_центр',
-                'n_iterations': 'Итер.', 'converged': 'Сошёлся'
+                'n_iterations': 'Итерации'
             })
             st.dataframe(df_display, use_container_width=True, hide_index=True)
         else:
@@ -114,51 +97,65 @@ elif menu == "Верификация по сетке":
             st.markdown(r"""
             **Верификация на последовательности сеток**
             ($h=1.0$, $\Gamma=-2$, все $p$)
+
+            Сравнение значений $\omega$ и $S$ на трёх уровнях сетки. 
+            По оси абсцисс отложен характерный размер ячейки $h \sim 1/\sqrt{N_{cells}}$.
             """)
 
             available_p = sorted(df_ver['degree'].unique())
 
             col1, col2 = st.columns(2)
             with col1:
-                st.markdown("**Зависимость $\omega$ от сетки:**")
+                st.markdown("**Сходимость ω:**")
                 fig, ax = plt.subplots(figsize=(6, 4))
                 for p in available_p:
                     df_p = df_ver[df_ver['degree'] == p].sort_values('cells')
                     if len(df_p) >= 2:
                         h_mesh = [1/(c)**(1/2) for c in df_p['cells']]
                         ax.plot(h_mesh, df_p['omega'].values, 'o-', markersize=8, linewidth=2,
-                                label=f'$p={int(p)}$')
-                ax.set_xlabel('Характерный размер ячейки')
-                ax.set_ylabel(r'$\omega$')
+                                label=f'p={int(p)}')
+                ax.set_xlabel(r'$h \sim 1/\sqrt{N_{cells}}$')
+                ax.set_ylabel('ω')
                 ax.legend()
                 ax.grid(True, alpha=0.3)
                 fig.tight_layout()
                 st.pyplot(fig)
 
             with col2:
-                st.markdown("**Таблица (p=2):**")
-                df_p2 = df_ver[df_ver['degree'] == 2].sort_values('cells')
-                if len(df_p2) > 0:
-                    df_t = df_p2[['level', 'nodes', 'cells', 'omega', 'S', 'psi_min', 'x_attach']].copy()
-                    for col in ['omega', 'S', 'psi_min', 'x_attach']:
-                        df_t[col] = df_t[col].apply(lambda x: f"{float(x):.4f}")
-                    df_t = df_t.rename(columns={
-                        'level': 'Сетка', 'nodes': 'Узлы', 'cells': 'Ячейки',
-                        'omega': 'ω', 'S': 'S', 'psi_min': 'ψ_min', 'x_attach': 'x_прис'
-                    })
-                    st.dataframe(df_t, use_container_width=True, hide_index=True)
-                else:
-                    st.info("Нет данных для p=2.")
+                st.markdown("**Сходимость S:**")
+                fig, ax = plt.subplots(figsize=(6, 4))
+                for p in available_p:
+                    df_p = df_ver[df_ver['degree'] == p].sort_values('cells')
+                    if len(df_p) >= 2:
+                        h_mesh = [1/(c)**(1/2) for c in df_p['cells']]
+                        ax.plot(h_mesh, df_p['S'].values, 's-', markersize=8, linewidth=2,
+                                label=f'p={int(p)}')
+                ax.set_xlabel(r'$h \sim 1/\sqrt{N_{cells}}$')
+                ax.set_ylabel('S')
+                ax.legend()
+                ax.grid(True, alpha=0.3)
+                fig.tight_layout()
+                st.pyplot(fig)
 
-            st.markdown("**Поля $\psi$ для разных сеток (p=2):**")
+            st.markdown("**Таблица (p=2):**")
+            df_p2 = df_ver[df_ver['degree'] == 2].sort_values('cells')
+            if len(df_p2) > 0:
+                df_t = df_p2[['level', 'nodes', 'cells', 'omega', 'S', 'psi_min', 'x_attach']].copy()
+                for col in ['omega', 'S', 'psi_min', 'x_attach']:
+                    df_t[col] = df_t[col].apply(lambda x: f"{float(x):.4f}")
+                df_t = df_t.rename(columns={
+                    'level': 'Сетка', 'nodes': 'Узлы', 'cells': 'Ячейки',
+                    'omega': 'ω', 'S': 'S', 'psi_min': 'ψ_min', 'x_attach': 'x_прис'
+                })
+                st.dataframe(df_t, use_container_width=True, hide_index=True)
+
+            st.markdown("**Поля ψ для разных сеток (p=2):**")
             if len(df_p2) > 0:
                 cols = st.columns(len(df_p2))
                 for i, (_, row) in enumerate(df_p2.iterrows()):
                     with cols[i]:
                         if os.path.exists(row['psi_path']):
                             st.image(row['psi_path'], caption=f"{row['level']}", use_container_width=True)
-            else:
-                st.info("Нет данных для отображения.")
         else:
             st.warning("Нет данных верификации. Запустите расчёты.")
     else:
@@ -168,13 +165,13 @@ elif menu == "Влияние циркуляции":
     st.markdown("##### Влияние циркуляции на вихревую структуру")
 
     if df is not None:
-        # Ищем данные для level3, p=2, h=1.0
         df_gamma = df[(df['level'] == 'level3') & (df['degree'] == 2) & (df['h'] == 1.0)]
+        df_gamma = df_gamma.drop_duplicates(subset=['Gamma'])
         df_gamma = df_gamma.sort_values('Gamma')
 
         if len(df_gamma) > 0:
             st.markdown(r"""
-            **Расчёты при различных $\Gamma$** ($h=1.0$, level3, $p=2$)
+            **Расчёты при различных Γ** ($h=1.0$, level3, $p=2$)
             """)
 
             df_g_display = df_gamma[['Gamma', 'omega', 'S', 'psi_min', 'x_attach', 'y_max_vortex']].copy()
@@ -189,15 +186,15 @@ elif menu == "Влияние циркуляции":
             if len(df_gamma) >= 2:
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.markdown("**График $\omega$ и $S$:**")
+                    st.markdown("**График ω и S:**")
                     fig, ax1 = plt.subplots(figsize=(6, 4))
                     gamma_vals = df_gamma['Gamma'].values
-                    ax1.plot(gamma_vals, df_gamma['omega'].values, 'bo-', markersize=8, label=r'$\omega$')
-                    ax1.set_xlabel(r'$\Gamma$')
-                    ax1.set_ylabel(r'$\omega$', color='blue')
+                    ax1.plot(gamma_vals, df_gamma['omega'].values, 'bo-', markersize=8, label='ω')
+                    ax1.set_xlabel('Γ')
+                    ax1.set_ylabel('ω', color='blue')
                     ax2 = ax1.twinx()
-                    ax2.plot(gamma_vals, df_gamma['S'].values, 'rs-', markersize=8, label=r'$S$')
-                    ax2.set_ylabel(r'$S$', color='red')
+                    ax2.plot(gamma_vals, df_gamma['S'].values, 'rs-', markersize=8, label='S')
+                    ax2.set_ylabel('S', color='red')
                     lines1, labels1 = ax1.get_legend_handles_labels()
                     lines2, labels2 = ax2.get_legend_handles_labels()
                     ax1.legend(lines1 + lines2, labels1 + labels2)
@@ -206,11 +203,11 @@ elif menu == "Влияние циркуляции":
                     st.pyplot(fig)
 
                 with col2:
-                    st.markdown("**График $x_{прис}$ и $y_{max}$:**")
+                    st.markdown("**График x_прис и y_max:**")
                     fig, ax = plt.subplots(figsize=(6, 4))
-                    ax.plot(gamma_vals, df_gamma['x_attach'].values, 'o-', markersize=8, label=r'$x_{прис}$')
-                    ax.plot(gamma_vals, df_gamma['y_max_vortex'].values, 's-', markersize=8, label=r'$y_{max}$')
-                    ax.set_xlabel(r'$\Gamma$')
+                    ax.plot(gamma_vals, df_gamma['x_attach'].values, 'o-', markersize=8, label='x_прис')
+                    ax.plot(gamma_vals, df_gamma['y_max_vortex'].values, 's-', markersize=8, label='y_max')
+                    ax.set_xlabel('Γ')
                     ax.legend()
                     ax.grid(True, alpha=0.3)
                     fig.tight_layout()
@@ -221,9 +218,9 @@ elif menu == "Влияние циркуляции":
             for i, (_, row) in enumerate(df_gamma.iterrows()):
                 with cols[i]:
                     if os.path.exists(row['stream_path']):
-                        st.image(row['stream_path'], caption=f"$\Gamma={row['Gamma']}$", use_container_width=True)
+                        st.image(row['stream_path'], caption=f"Γ = {row['Gamma']}", use_container_width=True)
         else:
-            st.warning("Нет данных для level3. Возможно, расчёты ещё не завершены.")
+            st.warning("Нет данных для level3.")
     else:
         st.warning("Результаты не найдены.")
 
@@ -232,11 +229,12 @@ elif menu == "Влияние высоты уступа":
 
     if df is not None:
         df_h = df[(df['level'] == 'level3') & (df['degree'] == 2) & (df['Gamma'] == -2.0)]
+        df_h = df_h.drop_duplicates(subset=['h'])
         df_h = df_h.sort_values('h')
 
         if len(df_h) > 0:
             st.markdown(r"""
-            **Расчёты при различных $h$** ($\Gamma=-2$, level3, $p=2$)
+            **Расчёты при различных h** ($\Gamma=-2$, level3, $p=2$)
             """)
 
             df_h_display = df_h[['h', 'omega', 'S', 'psi_min', 'x_attach', 'y_max_vortex']].copy()
@@ -251,15 +249,15 @@ elif menu == "Влияние высоты уступа":
             if len(df_h) >= 2:
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.markdown("**График $\omega$ и $S$:**")
+                    st.markdown("**График ω и S:**")
                     fig, ax1 = plt.subplots(figsize=(6, 4))
                     h_vals = df_h['h'].values
-                    ax1.plot(h_vals, df_h['omega'].values, 'bo-', markersize=8, label=r'$\omega$')
-                    ax1.set_xlabel(r'$h$')
-                    ax1.set_ylabel(r'$\omega$', color='blue')
+                    ax1.plot(h_vals, df_h['omega'].values, 'bo-', markersize=8, label='ω')
+                    ax1.set_xlabel('h')
+                    ax1.set_ylabel('ω', color='blue')
                     ax2 = ax1.twinx()
-                    ax2.plot(h_vals, df_h['S'].values, 'rs-', markersize=8, label=r'$S$')
-                    ax2.set_ylabel(r'$S$', color='red')
+                    ax2.plot(h_vals, df_h['S'].values, 'rs-', markersize=8, label='S')
+                    ax2.set_ylabel('S', color='red')
                     lines1, labels1 = ax1.get_legend_handles_labels()
                     lines2, labels2 = ax2.get_legend_handles_labels()
                     ax1.legend(lines1 + lines2, labels1 + labels2)
@@ -268,11 +266,11 @@ elif menu == "Влияние высоты уступа":
                     st.pyplot(fig)
 
                 with col2:
-                    st.markdown("**График $x_{прис}$ и $y_{max}$:**")
+                    st.markdown("**График x_прис и y_max:**")
                     fig, ax = plt.subplots(figsize=(6, 4))
-                    ax.plot(h_vals, df_h['x_attach'].values, 'o-', markersize=8, label=r'$x_{прис}$')
-                    ax.plot(h_vals, df_h['y_max_vortex'].values, 's-', markersize=8, label=r'$y_{max}$')
-                    ax.set_xlabel(r'$h$')
+                    ax.plot(h_vals, df_h['x_attach'].values, 'o-', markersize=8, label='x_прис')
+                    ax.plot(h_vals, df_h['y_max_vortex'].values, 's-', markersize=8, label='y_max')
+                    ax.set_xlabel('h')
                     ax.legend()
                     ax.grid(True, alpha=0.3)
                     fig.tight_layout()
@@ -283,30 +281,30 @@ elif menu == "Влияние высоты уступа":
             for i, (_, row) in enumerate(df_h.iterrows()):
                 with cols[i]:
                     if os.path.exists(row['stream_path']):
-                        st.image(row['stream_path'], caption=f"$h={row['h']}$", use_container_width=True)
+                        st.image(row['stream_path'], caption=f"h = {row['h']}", use_container_width=True)
         else:
-            st.warning("Нет данных для level3. Возможно, расчёты ещё не завершены.")
+            st.warning("Нет данных для level3.")
     else:
         st.warning("Результаты не найдены.")
 
 elif menu == "Поля функции тока":
-    st.markdown("##### Поля функции тока $\psi$")
+    st.markdown("##### Поля функции тока ψ")
 
     if df is not None:
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             h_vals = sorted(df['h'].unique())
-            h_sel = st.selectbox("Высота уступа $h$", h_vals, key='field_h')
+            h_sel = st.selectbox("Высота уступа h", h_vals, key='field_h')
         with col2:
             gamma_vals = sorted(df[df['h'] == h_sel]['Gamma'].unique())
-            gamma_sel = st.selectbox("$\Gamma$", gamma_vals, key='field_gamma')
+            gamma_sel = st.selectbox("Γ", gamma_vals, key='field_gamma')
         with col3:
             level_vals = sorted(df[(df['h'] == h_sel) & (df['Gamma'] == gamma_sel)]['level'].unique())
             level_sel = st.selectbox("Сетка", level_vals, key='field_level')
         with col4:
             p_vals = sorted(df[(df['h'] == h_sel) & (df['Gamma'] == gamma_sel) &
                                (df['level'] == level_sel)]['degree'].unique())
-            p_sel = st.selectbox("Степень $p$", p_vals, key='field_p')
+            p_sel = st.selectbox("Степень p", p_vals, key='field_p')
 
         selected = df[(df['h'] == h_sel) & (df['Gamma'] == gamma_sel) &
                       (df['level'] == level_sel) & (df['degree'] == p_sel)]
@@ -316,7 +314,7 @@ elif menu == "Поля функции тока":
             cols = st.columns(2)
             with cols[0]:
                 if os.path.exists(row['psi_path']):
-                    st.image(row['psi_path'], caption="Цветовая карта $\psi$", use_container_width=True)
+                    st.image(row['psi_path'], caption="Цветовая карта ψ", use_container_width=True)
             with cols[1]:
                 if os.path.exists(row['stream_path']):
                     st.image(row['stream_path'], caption="Линии тока", use_container_width=True)
@@ -324,17 +322,17 @@ elif menu == "Поля функции тока":
             st.markdown("**Параметры и характеристики:**")
             c1, c2, c3, c4, c5, c6 = st.columns(6)
             with c1:
-                st.metric("$\omega$", f"{row['omega']:.4f}")
+                st.metric("ω", f"{row['omega']:.4f}")
             with c2:
-                st.metric("$S$", f"{row['S']:.4f}")
+                st.metric("S", f"{row['S']:.4f}")
             with c3:
-                st.metric("$\psi_{min}$", f"{row['psi_min']:.4f}")
+                st.metric("ψ_min", f"{row['psi_min']:.4f}")
             with c4:
-                st.metric("$x_{прис}$", f"{row['x_attach']:.4f}")
+                st.metric("x_прис", f"{row['x_attach']:.4f}")
             with c5:
-                st.metric("$y_{max}$", f"{row['y_max_vortex']:.4f}")
+                st.metric("y_max", f"{row['y_max_vortex']:.4f}")
             with c6:
-                st.metric("Итераций", int(row['n_iterations']))
+                st.metric("Итерации", int(row['n_iterations']))
         else:
             st.warning("Нет результатов для выбранной комбинации.")
     else:
@@ -346,29 +344,28 @@ elif menu == "Характеристики вихря":
     if df is not None:
         st.markdown(r"""
         **Характеристики вихревой зоны:**
-        - $\psi_{min}$ — минимальное значение функции тока (центр вихря)
-        - $x_{прис}$ — координата точки присоединения ($\psi=0$ на нижней стенке)
-        - $y_{max}$ — максимальная высота вихревой зоны
-        - $x_{центр}, y_{центр}$ — координаты центра вихря
+        - ψ_min — минимальное значение функции тока (центр вихря)
+        - x_прис — координата точки присоединения (ψ=0 на нижней стенке)
+        - y_max — максимальная высота вихревой зоны
+        - x_центр, y_центр — координаты центра вихря
         """)
 
         col1, col2, col3 = st.columns(3)
         with col1:
             h_vals = sorted(df['h'].unique())
-            h_sel = st.selectbox("Высота уступа $h$", h_vals, key='geom_h')
+            h_sel = st.selectbox("Высота уступа h", h_vals, key='geom_h')
         with col2:
             gamma_vals = sorted(df[df['h'] == h_sel]['Gamma'].unique())
-            gamma_sel = st.selectbox("$\Gamma$", gamma_vals, key='geom_gamma')
+            gamma_sel = st.selectbox("Γ", gamma_vals, key='geom_gamma')
         with col3:
             level_vals = sorted(df[(df['h'] == h_sel) & (df['Gamma'] == gamma_sel)]['level'].unique())
             level_sel = st.selectbox("Сетка", level_vals, key='geom_level')
 
-        # Показываем все степени для выбранной конфигурации
         df_geom = df[(df['h'] == h_sel) & (df['Gamma'] == gamma_sel) & (df['level'] == level_sel)]
         df_geom = df_geom.sort_values('degree')
 
         if len(df_geom) > 0:
-            st.markdown("**Характеристики для всех $p$:**")
+            st.markdown("**Характеристики для всех p:**")
             df_char = df_geom[['degree', 'psi_min', 'x_attach', 'y_max_vortex',
                                'x_vortex_center', 'y_vortex_center']].copy()
             for col in ['psi_min', 'x_attach', 'y_max_vortex', 'x_vortex_center', 'y_vortex_center']:
@@ -390,10 +387,10 @@ elif menu == "Сходимость итераций":
         col1, col2, col3 = st.columns(3)
         with col1:
             h_vals = sorted(df['h'].unique())
-            h_sel = st.selectbox("Высота уступа $h$", h_vals, key='conv_h')
+            h_sel = st.selectbox("Высота уступа h", h_vals, key='conv_h')
         with col2:
             gamma_vals = sorted(df[df['h'] == h_sel]['Gamma'].unique())
-            gamma_sel = st.selectbox("$\Gamma$", gamma_vals, key='conv_gamma')
+            gamma_sel = st.selectbox("Γ", gamma_vals, key='conv_gamma')
         with col3:
             level_vals = sorted(df[(df['h'] == h_sel) & (df['Gamma'] == gamma_sel)]['level'].unique())
             level_sel = st.selectbox("Сетка", level_vals, key='conv_level')
@@ -408,7 +405,7 @@ elif menu == "Сходимость итераций":
                 with cols[i % 3]:
                     conv_file = row['conv_path']
                     if os.path.exists(conv_file) and str(conv_file) != "nan" and conv_file != "":
-                        st.image(conv_file, caption=f"$p={int(row['degree'])}$", use_container_width=True)
+                        st.image(conv_file, caption=f"p = {int(row['degree'])}", use_container_width=True)
         else:
             st.warning("Нет результатов.")
     else:
@@ -417,9 +414,71 @@ elif menu == "Сходимость итераций":
 elif menu == "Код решателя":
     st.markdown("##### Код решателя (vortex_solver.py)")
 
-    with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), "vortex_solver.py"), "r") as f:
-        code = f.read()
-    st.code(code, language="python")
+    st.markdown("**Инициализация и краевые условия:**")
+    st.code('''V = FunctionSpace(mesh, 'P', degree)
+psi, phi = TrialFunction(V), TestFunction(V)
+
+# Краевые условия
+bc_G1 = DirichletBC(V, Constant(0.0), boundaries, 1)   # Gamma1: psi = 0
+bc_G2 = DirichletBC(V, Constant(H), boundaries, 2)     # Gamma2: psi = H
+inflow_expr = Expression('H * x[1]', H=H, degree=degree)
+bc_G3 = DirichletBC(V, inflow_expr, boundaries, 3)     # Gamma3: psi = H*x2
+bcs = [bc_G1, bc_G2, bc_G3]
+
+a = dot(grad(psi), grad(phi)) * dx
+DG0 = FunctionSpace(mesh, 'DG', 0)''', language="python")
+
+    st.markdown("**Начальное приближение (уравнение Лапласа):**")
+    st.code('''L0 = Constant(0.0) * phi * dx
+psi_k = Function(V)
+solve(a == L0, psi_k, bcs)
+
+# Если вихря нет — принудительная зона за уступом
+if not has_vortex:
+    marker_vals = np.zeros(DG0.dim())
+    for i, coord in enumerate(coords_DG):
+        if 1.0 <= coord[0] <= 2.0 and -h <= coord[1] <= 0.0:
+            marker_vals[i] = 1.0
+    S_init = np.sum(marker_vals) * (1.0 * h / DG0.dim())
+    omega_init = Gamma / S_init
+    # Первая итерация с принудительной зоной...''', language="python")
+
+    st.markdown("**Итерационный процесс:**")
+    st.code('''for k in range(max_iter):
+    # Шаг 1: Определение вихревой зоны (psi < 0)
+    for cell in cells(mesh):
+        if np.min(psi_vals[dofmap.cell_dofs(cell.index())]) < 0:
+            marker_vals[cell.index()] = 1.0
+
+    # Шаг 2: Площадь вихревой зоны
+    S_k = assemble(vortex_marker * dx_custom)
+
+    # Шаг 3: Завихрённость
+    omega_k = Gamma / S_k
+
+    # Шаг 4-5: Правая часть и решение уравнения Пуассона
+    f_func = Function(DG0)
+    f_func.vector().set_local(marker_vals * omega_k)
+    L_rhs = f_func * phi * dx
+    psi_new = Function(V)
+    solve(a == L_rhs, psi_new, bcs)
+
+    # Шаг 6: Проверка сходимости
+    error = norm(psi_new - psi_k, 'L2') / norm(psi_new, 'L2')
+    if error < tol: break
+    psi_k.assign(psi_new)''', language="python")
+
+    st.markdown("**Характеристики вихря:**")
+    st.code('''def compute_vortex_characteristics(psi, mesh):
+    # Минимум psi и центр вихря
+    psi_min = np.min(psi_verts)
+    x_vortex_center, y_vortex_center = coords[np.argmin(psi_verts)]
+
+    # Точка присоединения: psi=0 на нижней стенке после уступа
+    # Линейная интерполяция между узлами с разными знаками psi
+
+    # Максимальная высота вихря: max x2 среди точек с psi < 0
+    y_max_vortex = max(x2 for (x1, x2), psi < 0)''', language="python")
 
 elif menu == "Выводы":
     st.markdown(r"""
@@ -427,25 +486,25 @@ elif menu == "Выводы":
 
     **1. Верификация на последовательности сеток:**
 
-    - Значения $\omega$, $S$ и характеристик вихря сходятся при измельчении сетки
+    - Значения ω, S и характеристик вихря сходятся при измельчении сетки
     - Разница между level1 и level3 существенна, между level2 и level3 — меньше
 
-    **2. Влияние циркуляции $\Gamma$:**
+    **2. Влияние циркуляции Γ:**
 
-    - С ростом $|\Gamma|$ площадь вихревой зоны $S$ увеличивается
-    - Точка присоединения $x_{прис}$ смещается вправо
-    - $|\omega|$ меняется слабее, чем $S$
+    - С ростом |Γ| площадь вихревой зоны S увеличивается
+    - Точка присоединения x_прис смещается вправо
+    - |ω| меняется слабее, чем S
 
-    **3. Влияние высоты уступа $h$:**
+    **3. Влияние высоты уступа h:**
 
-    - С увеличением $h$ площадь вихря $S$ растёт
-    - $|\omega|$ при больших $h$ уменьшается — вихрь распределяется по большей площади
-    - Максимальная высота вихря $y_{max}$ растёт с $h$
+    - С увеличением h площадь вихря S растёт
+    - |ω| при больших h уменьшается — вихрь распределяется по большей площади
+    - Максимальная высота вихря y_max растёт с h
 
-    **4. Влияние степени полиномов $p$:**
+    **4. Влияние степени полиномов p:**
 
-    - Результаты для $p=1,2,3$ близки по интегральным характеристикам
-    - Более высокие $p$ могут требовать больше итераций для сходимости
+    - Результаты для p=1,2,3 близки по интегральным характеристикам
+    - Более высокие p могут требовать больше итераций для сходимости
 
     **5. Итерационный процесс:**
 

@@ -4,14 +4,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-st.set_page_config(page_title="Навье-Стокс", layout="wide")
+st.set_page_config(page_title="Уравнения Навье-Стокса", layout="wide")
 
 RESULTS_NS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "results_ns")
 RESULTS_VP_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "results")
 
 menu = st.sidebar.radio('***',
-                        ("Теория",
-                         "Результаты NS",
+                        ("Постановка",
+                         "Результаты",
                          "Характеристики вихря",
                          "Сравнение с вихре-потенциальной",
                          "Код решателя",
@@ -31,7 +31,7 @@ if os.path.exists(csv_vp):
 else:
     df_vp = None
 
-if menu == "Теория":
+if menu == "Постановка":
     st.markdown(r"""
     ##### Стационарные уравнения Навье-Стокса
 
@@ -64,14 +64,14 @@ if menu == "Теория":
 
     **Отличие от вихре-потенциальной модели:**
 
-    | Характеристика | Вихре-потенциальная | Навье-Стокс |
+    | Характеристика | Вихре-потенциальная | Навье-Стокса |
     |----------------|---------------------|-------------|
     | Вязкость | Отсутствует | $\nu > 0$ |
     | Вихрь | Задан $\omega = \text{const}$ | Возникает из-за отрыва |
     | Размер вихря | Из условия $\int \omega = \Gamma$ | Из баланса вязкости и инерции |
     | Условие на стенках | Непротекание | Прилипание |
 
-    **Метод решения (Пикар):**
+    **Метод Пикара:**
 
     Конвективный член линеаризуется:
 
@@ -90,21 +90,21 @@ if menu == "Теория":
     Вихревая зона (отрывная область): $\psi < 0$.
     """)
 
-elif menu == "Результаты NS":
-    st.markdown("##### Результаты расчётов Навье-Стокса")
+elif menu == "Результаты":
+    st.markdown("##### Результаты расчётов")
 
     if df_ns is not None:
         st.markdown("**Параметры расчётов:** $h = 1.0$, сетка level3")
 
         st.markdown("**Сводная таблица:**")
         df_display = df_ns[['Re', 'nodes', 'cells', 'S_vortex', 'psi_min', 'x_attach',
-                            'y_max_vortex', 'n_iterations', 'converged']].copy()
+                            'y_max_vortex', 'n_iterations']].copy()
         for col in ['S_vortex', 'psi_min', 'x_attach', 'y_max_vortex']:
             df_display[col] = df_display[col].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "")
         df_display = df_display.rename(columns={
             'Re': 'Re', 'nodes': 'Узлы', 'cells': 'Ячейки',
             'S_vortex': 'S', 'psi_min': 'ψ_min', 'x_attach': 'x_прис',
-            'y_max_vortex': 'y_max', 'n_iterations': 'Итер.', 'converged': 'Сошёлся'
+            'y_max_vortex': 'y_max', 'n_iterations': 'Итерации'
         })
         st.dataframe(df_display, use_container_width=True, hide_index=True)
 
@@ -225,7 +225,7 @@ elif menu == "Сравнение с вихре-потенциальной":
         **Сравнение для базового варианта:** $h = 1.0$, сетка level3
 
         Сравниваются:
-        - Навье-Стокс при различных $Re$
+        - Модель с ур-ми Навье-Стокса при различных $Re$
         - Вихре-потенциальная модель при $\Gamma = -1, -2, -4$
         """)
 
@@ -236,19 +236,19 @@ elif menu == "Сравнение с вихре-потенциальной":
         # Выбор типа графика и параметров
         st.markdown("**Выберите тип сравнения:**")
         compare_type = st.radio("Тип графика:",
-                                ["Линии тока", "Цветовая карта $\psi$", "Поле скорости (только NS)"])
+                                ["Линии тока", "Цветовая карта $\psi$", "Поле скорости"])
 
-        if compare_type == "Поле скорости (только NS)":
-            st.markdown("**Поле скорости Навье-Стокса:**")
-            Re_sel = st.selectbox("Re (Навье-Стокс)", sorted(df_ns['Re'].unique()), key='comp_vel')
+        if compare_type == "Поле скорости":
+            st.markdown("**Поле скорости для уравнений Навье-Стокса:**")
+            Re_sel = st.selectbox("Re (уравнения Навье-Стокса)", sorted(df_ns['Re'].unique()), key='comp_vel')
             ns_row = df_ns[df_ns['Re'] == Re_sel].iloc[0]
             if os.path.exists(ns_row['vel_path']):
-                st.image(ns_row['vel_path'], caption=f"Навье-Стокс: $Re={Re_sel}$", use_container_width=True)
+                st.image(ns_row['vel_path'], caption=f"Уравнения Навье-Стокса: $Re={Re_sel}$", use_container_width=True)
 
         else:
             col1, col2 = st.columns(2)
             with col1:
-                Re_sel = st.selectbox("Re (Навье-Стокс)", sorted(df_ns['Re'].unique()), key='comp_ns')
+                Re_sel = st.selectbox("Re (Навье-Стокса)", sorted(df_ns['Re'].unique()), key='comp_ns')
             with col2:
                 Gamma_sel = st.selectbox("Γ (вихре-потенциальная)",
                                          sorted(df_vp_base['Gamma'].unique()), key='comp_vp')
@@ -261,7 +261,7 @@ elif menu == "Сравнение с вихре-потенциальной":
                 with col1:
                     if os.path.exists(ns_row['stream_path']):
                         st.image(ns_row['stream_path'],
-                                 caption=f"Навье-Стокс: $Re={Re_sel}$", use_container_width=True)
+                                 caption=f"Уравнения Навье-Стокса: $Re={Re_sel}$", use_container_width=True)
                 with col2:
                     if os.path.exists(vp_row['stream_path']):
                         st.image(vp_row['stream_path'],
@@ -270,7 +270,7 @@ elif menu == "Сравнение с вихре-потенциальной":
                 with col1:
                     if os.path.exists(ns_row['psi_path']):
                         st.image(ns_row['psi_path'],
-                                 caption=f"Навье-Стокс: $Re={Re_sel}$", use_container_width=True)
+                                 caption=f"Уравнения Навье-Стокса: $Re={Re_sel}$", use_container_width=True)
                 with col2:
                     if os.path.exists(vp_row['psi_path']):
                         st.image(vp_row['psi_path'],
@@ -282,7 +282,7 @@ elif menu == "Сравнение с вихре-потенциальной":
 
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("**Навье-Стокс (все Re):**")
+            st.markdown("**Навье-Стокса (все Re):**")
             ns_table = df_ns[['Re', 'S_vortex', 'psi_min', 'x_attach', 'y_max_vortex']].copy()
             for col in ['S_vortex', 'psi_min', 'x_attach', 'y_max_vortex']:
                 ns_table[col] = ns_table[col].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "")
@@ -307,7 +307,7 @@ elif menu == "Сравнение с вихре-потенциальной":
         st.markdown("""
         **Качественные различия:**
 
-        | Особенность | Навье-Стокс | Вихре-потенциальная |
+        | Особенность | Навье-Стокса | Вихре-потенциальная |
         |-------------|-------------|---------------------|
         | Форма вихря | Вытянутая, с плавной границей | Компактная, с изломом на $\psi=0$ |
         | Точка присоединения | На нижней стенке | Внутри области |
@@ -319,15 +319,106 @@ elif menu == "Сравнение с вихре-потенциальной":
         st.warning("Не все данные загружены.")
 
 elif menu == "Код решателя":
-    st.markdown("##### Код решателя Навье-Стокса")
+    st.markdown("##### Код решателя уравнений Навье-Стокса")
 
-    solver_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ns_solver.py")
-    if os.path.exists(solver_path):
-        with open(solver_path, "r") as f:
-            code = f.read()
-        st.code(code, language="python")
-    else:
-        st.warning("Файл ns_solver.py не найден.")
+    st.markdown("**Инициализация и смешанное пространство Тейлора-Худа (P2/P1):**")
+    st.code('''nu = Constant(H / Re)
+
+# Пространства для скорости и давления
+V = VectorFunctionSpace(mesh, 'P', 2)
+Q = FunctionSpace(mesh, 'P', 1)
+
+# Смешанное пространство
+W_elem = MixedElement([V.ufl_element(), Q.ufl_element()])
+W = FunctionSpace(mesh, W_elem)
+
+u, p = TrialFunctions(W)
+v, q = TestFunctions(W)
+
+w = Function(W)
+u_k = Function(V)''', language="python")
+
+    st.markdown("**Краевые условия (прилипание на стенках, профиль Пуазейля на входе):**")
+    st.code('''zero_vec = Constant((0.0, 0.0))
+bc_walls_1 = DirichletBC(W.sub(0), zero_vec, boundaries, 1)
+bc_walls_2 = DirichletBC(W.sub(0), zero_vec, boundaries, 2)
+
+# Вход: параболический профиль Пуазейля
+inflow_ux = Expression('6.0 * x[1]/H * (1.0 - x[1]/H)', H=H, degree=3)
+inflow_uy = Constant(0.0)
+inflow_func = Function(V)
+inflow_func.assign(project(as_vector((inflow_ux, inflow_uy)), V))
+bc_inflow = DirichletBC(W.sub(0), inflow_func, boundaries, 3)
+
+bcs = [bc_walls_1, bc_walls_2, bc_inflow]''', language="python")
+
+    st.markdown("**Вариационная форма (линеаризация Пикара):**")
+    st.code('''# nu * вязкий член + (u_k · grad) u — конвективный член
+# - p * div(v) — градиент давления
+# - q * div(u) — условие несжимаемости
+F = (nu * inner(grad(u), grad(v)) * dx
+     + inner(grad(u) * u_k, v) * dx
+     - p * div(v) * dx
+     - q * div(u) * dx)
+
+a, L = lhs(F), rhs(F)
+w.vector()[:] = 0.0  # начальное приближение''', language="python")
+
+    st.markdown("**Итерации Пикара:**")
+    st.code('''for k in range(max_iter):
+    solve(a == L, w, bcs,
+          solver_parameters={"linear_solver": "mumps"})
+
+    u_new, p_new = w.split(deepcopy=True)
+
+    # Проверка сходимости по изменению скорости
+    if k > 0:
+        diff_u = Function(V)
+        diff_u.vector().set_local(
+            u_new.vector().get_local() - u_old.vector().get_local())
+        error = norm(diff_u, 'L2') / norm(u_new, 'L2')
+        if error < tol:
+            break
+
+    u_old.assign(u_new)
+    u_k.assign(u_new)  # обновляем конвективное поле''', language="python")
+
+    st.markdown("**Вычисление функции тока интегрированием скорости:**")
+    st.code('''def compute_stream_function(u, mesh):
+    V_psi = FunctionSpace(mesh, 'P', 2)
+    psi_func = Function(V_psi)
+    coords = V_psi.tabulate_dof_coordinates()
+    psi_vals = np.zeros(len(coords))
+    x2_min = mesh.coordinates()[:, 1].min()
+    l = 1.0  # длина уступа
+
+    for i, (x1, x2) in enumerate(coords):
+        x2_bottom = 0.0 if x1 <= l else x2_min
+        n_pts = 100
+        xi = np.linspace(x2_bottom, x2, n_pts)
+        integral = 0.0
+        for j in range(n_pts - 1):
+            u_a = u(x1, xi[j])[0]
+            u_b = u(x1, xi[j+1])[0]
+            integral += 0.5 * (u_a + u_b) * (xi[j+1] - xi[j])
+        psi_vals[i] = integral
+
+    psi_func.vector().set_local(psi_vals)
+    psi_func.vector().apply("insert")
+    return psi_func''', language="python")
+
+    st.markdown("**Характеристики вихревой зоны:**")
+    st.code('''def compute_vortex_characteristics_ns(psi, mesh):
+    # Минимум psi и центр вихря
+    psi_min = np.min(psi_verts)
+    x_vortex_center, y_vortex_center = coords[np.argmin(psi_verts)]
+
+    # Точка присоединения: psi=0 на нижней стенке после уступа
+    # Линейная интерполяция между узлами с разными знаками psi
+
+    # Максимальная высота вихря и площадь S
+    y_max_vortex = max(x2 for (x1, x2) if psi < 0)
+    S = sum(cell.volume() for cell if min(psi in cell) < 0)''', language="python")
 
 elif menu == "Выводы":
     st.markdown(r"""
@@ -355,9 +446,9 @@ elif menu == "Выводы":
     **4. Сравнение с вихре-потенциальной моделью:**
 
     - В модели Навье-Стокса вихрь более вытянутый и занимает большую площадь
-    - Точка присоединения в NS находится на нижней стенке, в VP — внутри области
-    - В NS есть вторичные вихри, в VP отсутствуют
-    - Форма вихря в NS плавная, в VP — с изломом на $\psi=0$
+    - Точка присоединения в находится на нижней стенке в модели Навье-Стокса, а в вихре-потенциальной — внутри области
+    - В модели Навье-Стокса есть вторичные вихри, в вихре-потенциальной отсутствуют
+    - Форма вихря в модели Навье-Стокса плавная, в вихре-потенциальной — с изломом на $\psi=0$
 
     **5. Физические особенности:**
 
