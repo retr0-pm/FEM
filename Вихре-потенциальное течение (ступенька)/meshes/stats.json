@@ -1,0 +1,83 @@
+[
+  {
+    "h": 0.5,
+    "level": "level1",
+    "factor": 0.8,
+    "nodes": 248,
+    "elements": 426,
+    "msh": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h0.5_level1.msh",
+    "png": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h0.5_level1.png"
+  },
+  {
+    "h": 0.5,
+    "level": "level2",
+    "factor": 0.35,
+    "nodes": 924,
+    "elements": 1712,
+    "msh": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h0.5_level2.msh",
+    "png": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h0.5_level2.png"
+  },
+  {
+    "h": 0.5,
+    "level": "level3",
+    "factor": 0.155,
+    "nodes": 3539,
+    "elements": 6826,
+    "msh": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h0.5_level3.msh",
+    "png": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h0.5_level3.png"
+  },
+  {
+    "h": 1.0,
+    "level": "level1",
+    "factor": 0.8,
+    "nodes": 328,
+    "elements": 579,
+    "msh": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.0_level1.msh",
+    "png": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.0_level1.png"
+  },
+  {
+    "h": 1.0,
+    "level": "level2",
+    "factor": 0.35,
+    "nodes": 1275,
+    "elements": 2400,
+    "msh": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.0_level2.msh",
+    "png": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.0_level2.png"
+  },
+  {
+    "h": 1.0,
+    "level": "level3",
+    "factor": 0.155,
+    "nodes": 4982,
+    "elements": 9681,
+    "msh": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.0_level3.msh",
+    "png": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.0_level3.png"
+  },
+  {
+    "h": 1.5,
+    "level": "level1",
+    "factor": 0.8,
+    "nodes": 391,
+    "elements": 698,
+    "msh": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.5_level1.msh",
+    "png": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.5_level1.png"
+  },
+  {
+    "h": 1.5,
+    "level": "level2",
+    "factor": 0.35,
+    "nodes": 1563,
+    "elements": 2961,
+    "msh": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.5_level2.msh",
+    "png": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.5_level2.png"
+  },
+  {
+    "h": 1.5,
+    "level": "level3",
+    "factor": 0.155,
+    "nodes": 6527,
+    "elements": 12743,
+    "msh": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.5_level3.msh",
+    "png": "/home/retr0/PycharmProjects/FEM/Вихре-потенциальное течение (ступенька)/meshes/channel_step_mesh_h1.5_level3.png"
+  }
+]
